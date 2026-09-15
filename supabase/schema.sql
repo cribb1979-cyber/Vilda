@@ -76,7 +76,7 @@ create table messages (
   id uuid default gen_random_uuid() primary key,
   sender_id uuid references profiles(id) not null,
   content text not null,
-  message_type text default 'text' check (message_type in ('text', 'preset_feeling', 'sos', 'arrived', 'trip_started')),
+  message_type text default 'text' check (message_type in ('text', 'image', 'preset_feeling', 'sos', 'arrived', 'trip_started')),
   is_read boolean default false,
   created_at timestamptz default now()
 );
@@ -125,6 +125,10 @@ create policy "Familjemedlemmar kan uppdatera larm (t.ex. markera löst)"
   on alerts for update
   using (auth.uid() is not null);
 
+create policy "Familjemedlemmar kan radera larm"
+  on alerts for delete
+  using (auth.uid() is not null);
+
 -- ============================================
 -- SAVED PLACES (hem, skola - för hitta-hem-pilen och geofencing)
 -- ============================================
@@ -147,6 +151,21 @@ create policy "Familjemedlemmar kan se sparade platser"
 create policy "Föräldrar kan hantera sparade platser"
   on saved_places for all
   using (auth.uid() is not null);
+
+-- ============================================
+-- CHAT IMAGES (Storage-bucket för bilder i chatten)
+-- ============================================
+insert into storage.buckets (id, name, public)
+values ('chat-images', 'chat-images', true)
+on conflict (id) do nothing;
+
+create policy "Familjemedlemmar kan ladda upp chattbilder"
+  on storage.objects for insert
+  with check (bucket_id = 'chat-images' and auth.uid() is not null);
+
+create policy "Familjemedlemmar kan se chattbilder"
+  on storage.objects for select
+  using (bucket_id = 'chat-images');
 
 -- ============================================
 -- REALTIME (så appen får push direkt vid nya rader)

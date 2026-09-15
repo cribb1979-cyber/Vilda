@@ -11,7 +11,9 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Vilda behöver din position för att visa var du är på kartan och hjälpa dig hitta hem eller till skolan.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Vilda behöver din position även i bakgrunden under resan så att pappa kan se att du kommit fram tryggt.",
-        "UIBackgroundModes": ["location", "remote-notification"]
+        "UIBackgroundModes": ["location", "remote-notification"],
+        "NSCameraUsageDescription": "Vilda behöver kameran för att du ska kunna ta och skicka bilder i chatten.",
+        "NSPhotoLibraryUsageDescription": "Vilda behöver tillgång till dina bilder för att du ska kunna skicka bilder i chatten."
       }
     },
     "android": {
@@ -27,6 +29,13 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Vilda behöver din position för att visa var du är och hjälpa dig hitta hem eller till skolan."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vilda behöver tillgång till dina bilder för att du ska kunna skicka bilder i chatten.",
+          "cameraPermission": "Vilda behöver kameran för att du ska kunna ta och skicka bilder i chatten."
         }
       ]
     ]

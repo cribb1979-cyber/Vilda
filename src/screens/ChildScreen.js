@@ -6,6 +6,7 @@ import * as Speech from 'expo-speech';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import SetHomeScreen from './SetHomeScreen';
+import ChatScreen from './ChatScreen';
 
 const FEELINGS = [
   { key: 'vilse', label: '🧭 Jag är vilse' },
@@ -21,6 +22,7 @@ export default function ChildScreen() {
   const { profile, signOut } = useAuth();
   const [worriedVisible, setWorriedVisible] = useState(false);
   const [setHomeVisible, setSetHomeVisible] = useState(false);
+  const [chatVisible, setChatVisible] = useState(false);
   const [homeDirection, setHomeDirection] = useState(null); // { bearingLabel, distanceMeters }
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -124,9 +126,14 @@ export default function ChildScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.greeting}>Hej {profile?.display_name}! 💜</Text>
-        <TouchableOpacity onPress={signOut}>
-          <Text style={styles.logout}>Logga ut</Text>
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity onPress={() => setChatVisible(true)}>
+            <Text style={styles.chatLink}>💬 Chatt</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={signOut}>
+            <Text style={styles.logout}>Logga ut</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Text style={styles.helper}>Pappa ser var du är just nu 📍</Text>
@@ -147,6 +154,7 @@ export default function ChildScreen() {
       </TouchableOpacity>
 
       <SetHomeScreen visible={setHomeVisible} onClose={() => setSetHomeVisible(false)} />
+      <ChatScreen visible={chatVisible} onClose={() => setChatVisible(false)} />
 
       <TouchableOpacity style={styles.worriedButton} onPress={() => setWorriedVisible(true)}>
         <Text style={styles.worriedText}>💛 Jag känner mig orolig</Text>
@@ -226,6 +234,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F3FF', padding: 20, paddingTop: 60 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   greeting: { fontSize: 24, fontWeight: '700', color: '#6D28D9' },
+  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  chatLink: { color: '#7C3AED', fontSize: 14, fontWeight: '600' },
   logout: { color: '#7C3AED', fontSize: 14 },
   helper: { color: '#7C3AED', marginTop: 6, marginBottom: 30 },
   homeCard: {

@@ -1,28 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { staticMapUrl } from '../lib/staticMap';
+import ChatScreen from './ChatScreen';
 
 export default function ParentScreen() {
   const { signOut } = useAuth();
   const [lastLocation, setLastLocation] = useState(null);
-  const [events, setEvents] = useState([]); // meddelanden + larm i en tidslinje
+  const [alerts, setAlerts] = useState([]);
+  const [chatVisible, setChatVisible] = useState(false);
 
   useEffect(() => {
     loadLatest();
 
-    // Lyssna på nya positioner, meddelanden och larm i realtid
+    // Lyssna på nya positioner och larm i realtid
     const channel = supabase
       .channel('parent-feed')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'locations' }, (payload) => {
         setLastLocation(payload.new);
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        setEvents((prev) => [{ type: 'message', ...payload.new }, ...prev]);
-      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alerts' }, (payload) => {
-        setEvents((prev) => [{ type: 'alert', ...payload.new }, ...prev]);
+        setAlerts((prev) => [payload.new, ...prev]);
       })
       .subscribe();
 
@@ -38,23 +37,30 @@ export default function ParentScreen() {
       .single();
     setLastLocation(loc);
 
-    const { data: msgs } = await supabase
-      .from('messages')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20);
-    const { data: alerts } = await supabase
+    const { data } = await supabase
       .from('alerts')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(30);
+    setAlerts(data || []);
+  }
 
-    const combined = [
-      ...(msgs || []).map((m) => ({ type: 'message', ...m })),
-      ...(alerts || []).map((a) => ({ type: 'alert', ...a })),
-    ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-    setEvents(combined);
+  function handleDeleteAlert(id) {
+    Alert.alert('Radera?', 'Vill du radera den här händelsen?', [
+      { text: 'Avbryt', style: 'cancel' },
+      {
+        text: 'Radera',
+        style: 'destructive',
+        onPress: async () => {
+          const { error } = await supabase.from('alerts').delete().eq('id', id);
+          if (error) {
+            Alert.alert('Kunde inte radera', error.message);
+            return;
+          }
+          setAlerts((prev) => prev.filter((a) => a.id !== id));
+        },
+      },
+    ]);
   }
 
   const minutesAgo = lastLocation
@@ -65,9 +71,14 @@ export default function ParentScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Vilda 💜</Text>
-        <TouchableOpacity onPress={signOut}>
-          <Text style={styles.logout}>Logga ut</Text>
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity onPress={() => setChatVisible(true)}>
+            <Text style={styles.chatLink}>💬 Chatt</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={signOut}>
+            <Text style={styles.logout}>Logga ut</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.statusCard}>
@@ -94,35 +105,32 @@ export default function ParentScreen() {
         />
       )}
 
-      <Text style={styles.sectionTitle}>Senaste</Text>
+      <Text style={styles.sectionTitle}>Larm & känslor</Text>
       <FlatList
-        data={events}
+        data={alerts}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <EventRow item={item} />}
+        renderItem={({ item }) => <AlertRow item={item} onDelete={() => handleDeleteAlert(item.id)} />}
         contentContainerStyle={{ paddingBottom: 40 }}
       />
+
+      <ChatScreen visible={chatVisible} onClose={() => setChatVisible(false)} />
     </View>
   );
 }
 
-function EventRow({ item }) {
-  if (item.type === 'alert') {
-    const isSos = item.alert_type === 'sos';
-    return (
-      <View style={[styles.eventRow, isSos ? styles.sosRow : styles.worriedRow]}>
-        <Text style={styles.eventIcon}>{isSos ? '🚨' : '💛'}</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.eventTitle}>{isSos ? 'LARM' : 'Känner sig orolig'}</Text>
-          {item.feeling ? <Text style={styles.eventBody}>{item.feeling}</Text> : null}
-          {item.note ? <Text style={styles.eventBody}>{item.note}</Text> : null}
-        </View>
-      </View>
-    );
-  }
+function AlertRow({ item, onDelete }) {
+  const isSos = item.alert_type === 'sos';
   return (
-    <View style={styles.eventRow}>
-      <Text style={styles.eventIcon}>💬</Text>
-      <Text style={styles.eventBody}>{item.content}</Text>
+    <View style={[styles.eventRow, isSos ? styles.sosRow : styles.worriedRow]}>
+      <Text style={styles.eventIcon}>{isSos ? '🚨' : '💛'}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.eventTitle}>{isSos ? 'LARM' : 'Känner sig orolig'}</Text>
+        {item.feeling ? <Text style={styles.eventBody}>{item.feeling}</Text> : null}
+        {item.note ? <Text style={styles.eventBody}>{item.note}</Text> : null}
+      </View>
+      <TouchableOpacity onPress={onDelete} style={styles.deleteButton}>
+        <Text style={styles.deleteButtonText}>🗑</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -131,6 +139,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F3FF', padding: 20, paddingTop: 60 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   title: { fontSize: 28, fontWeight: '700', color: '#6D28D9' },
+  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  chatLink: { color: '#7C3AED', fontSize: 14, fontWeight: '600' },
   logout: { color: '#7C3AED', fontSize: 14 },
   statusCard: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 24 },
   statusLabel: { color: '#7C3AED', fontSize: 14 },
@@ -151,4 +161,6 @@ const styles = StyleSheet.create({
   eventIcon: { fontSize: 22, marginRight: 10 },
   eventTitle: { fontWeight: '700', fontSize: 15 },
   eventBody: { fontSize: 14, color: '#333' },
+  deleteButton: { padding: 8 },
+  deleteButtonText: { fontSize: 18 },
 });
