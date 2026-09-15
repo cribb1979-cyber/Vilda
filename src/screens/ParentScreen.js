@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
@@ -7,6 +8,7 @@ export default function ParentScreen() {
   const { signOut } = useAuth();
   const [lastLocation, setLastLocation] = useState(null);
   const [events, setEvents] = useState([]); // meddelanden + larm i en tidslinje
+  const mapRef = useRef(null);
 
   useEffect(() => {
     loadLatest();
@@ -27,6 +29,20 @@ export default function ParentScreen() {
 
     return () => supabase.removeChannel(channel);
   }, []);
+
+  useEffect(() => {
+    if (lastLocation) {
+      mapRef.current?.animateToRegion(
+        {
+          latitude: lastLocation.latitude,
+          longitude: lastLocation.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        },
+        500
+      );
+    }
+  }, [lastLocation]);
 
   async function loadLatest() {
     const { data: loc } = await supabase
@@ -86,8 +102,23 @@ export default function ParentScreen() {
         )}
       </View>
 
-      {/* Här kopplas en riktig kartkomponent in, t.ex. react-native-maps,
-          med lastLocation.latitude / lastLocation.longitude som markör */}
+      {lastLocation && (
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          initialRegion={{
+            latitude: lastLocation.latitude,
+            longitude: lastLocation.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          }}
+        >
+          <Marker
+            coordinate={{ latitude: lastLocation.latitude, longitude: lastLocation.longitude }}
+            title="Vilda"
+          />
+        </MapView>
+      )}
 
       <Text style={styles.sectionTitle}>Senaste</Text>
       <FlatList
@@ -131,6 +162,7 @@ const styles = StyleSheet.create({
   statusLabel: { color: '#7C3AED', fontSize: 14 },
   statusValue: { fontSize: 22, fontWeight: '600', marginTop: 4 },
   batteryText: { marginTop: 8, fontSize: 16, color: '#444' },
+  map: { height: 220, borderRadius: 16, overflow: 'hidden', marginBottom: 24 },
   sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 10, color: '#4C1D95' },
   eventRow: {
     flexDirection: 'row',
