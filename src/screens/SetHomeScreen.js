@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,18 +8,18 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  Image,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
+import { staticMapUrl } from '../lib/staticMap';
 
 const STOCKHOLM = { latitude: 59.3293, longitude: 18.0686 };
 
 export default function SetHomeScreen({ visible, onClose }) {
-  const mapRef = useRef(null);
-  const [region, setRegion] = useState(null);
   const [marker, setMarker] = useState(null);
   const [address, setAddress] = useState('');
+  const [loadingInitial, setLoadingInitial] = useState(true);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -28,6 +28,7 @@ export default function SetHomeScreen({ visible, onClose }) {
   }, [visible]);
 
   async function loadInitial() {
+    setLoadingInitial(true);
     const { data: home } = await supabase
       .from('saved_places')
       .select('*')
@@ -36,12 +37,7 @@ export default function SetHomeScreen({ visible, onClose }) {
 
     if (home) {
       setMarker({ latitude: home.latitude, longitude: home.longitude });
-      setRegion({
-        latitude: home.latitude,
-        longitude: home.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      });
+      setLoadingInitial(false);
       return;
     }
 
@@ -49,19 +45,10 @@ export default function SetHomeScreen({ visible, onClose }) {
     if (status === 'granted') {
       const loc = await Location.getCurrentPositionAsync({});
       setMarker({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-      setRegion({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      });
     } else {
-      setRegion({ ...STOCKHOLM, latitudeDelta: 0.05, longitudeDelta: 0.05 });
+      setMarker(STOCKHOLM);
     }
-  }
-
-  function handleMapPress(e) {
-    setMarker(e.nativeEvent.coordinate);
+    setLoadingInitial(false);
   }
 
   async function handleSearch() {
@@ -74,10 +61,7 @@ export default function SetHomeScreen({ visible, onClose }) {
         return;
       }
       const { latitude, longitude } = results[0];
-      const newRegion = { latitude, longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 };
       setMarker({ latitude, longitude });
-      setRegion(newRegion);
-      mapRef.current?.animateToRegion(newRegion, 500);
     } catch (e) {
       Alert.alert('Kunde inte söka', 'Något gick fel, försök igen.');
     } finally {
@@ -92,15 +76,7 @@ export default function SetHomeScreen({ visible, onClose }) {
       return;
     }
     const loc = await Location.getCurrentPositionAsync({});
-    const newRegion = {
-      latitude: loc.coords.latitude,
-      longitude: loc.coords.longitude,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    };
     setMarker({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-    setRegion(newRegion);
-    mapRef.current?.animateToRegion(newRegion, 500);
   }
 
   async function handleSave() {
@@ -131,7 +107,7 @@ export default function SetHomeScreen({ visible, onClose }) {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.helper}>Tryck på kartan där ni bor, eller sök adress nedan.</Text>
+        <Text style={styles.helper}>Sök adress nedan, eller använd din nuvarande position.</Text>
 
         <View style={styles.searchRow}>
           <TextInput
@@ -147,14 +123,14 @@ export default function SetHomeScreen({ visible, onClose }) {
           </TouchableOpacity>
         </View>
 
-        {region ? (
-          <MapView ref={mapRef} style={styles.map} initialRegion={region} onPress={handleMapPress}>
-            {marker && <Marker coordinate={marker} title="Hem" />}
-          </MapView>
-        ) : (
+        {loadingInitial ? (
           <View style={styles.mapLoading}>
             <ActivityIndicator size="large" color="#7C3AED" />
           </View>
+        ) : (
+          marker && (
+            <Image style={styles.map} source={{ uri: staticMapUrl(marker.latitude, marker.longitude) }} />
+          )
         )}
 
         <TouchableOpacity style={styles.locationButton} onPress={handleUseCurrentLocation}>
@@ -197,7 +173,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   searchButtonText: { color: '#fff', fontWeight: '600' },
-  map: { flex: 1, borderRadius: 16, overflow: 'hidden', marginBottom: 14 },
+  map: { flex: 1, borderRadius: 16, marginBottom: 14 },
   mapLoading: { flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
   locationButton: {
     backgroundColor: '#fff',

@@ -1,14 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { staticMapUrl } from '../lib/staticMap';
 
 export default function ParentScreen() {
   const { signOut } = useAuth();
   const [lastLocation, setLastLocation] = useState(null);
   const [events, setEvents] = useState([]); // meddelanden + larm i en tidslinje
-  const mapRef = useRef(null);
 
   useEffect(() => {
     loadLatest();
@@ -29,20 +28,6 @@ export default function ParentScreen() {
 
     return () => supabase.removeChannel(channel);
   }, []);
-
-  useEffect(() => {
-    if (lastLocation) {
-      mapRef.current?.animateToRegion(
-        {
-          latitude: lastLocation.latitude,
-          longitude: lastLocation.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        },
-        500
-      );
-    }
-  }, [lastLocation]);
 
   async function loadLatest() {
     const { data: loc } = await supabase
@@ -103,21 +88,10 @@ export default function ParentScreen() {
       </View>
 
       {lastLocation && (
-        <MapView
-          ref={mapRef}
+        <Image
           style={styles.map}
-          initialRegion={{
-            latitude: lastLocation.latitude,
-            longitude: lastLocation.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          }}
-        >
-          <Marker
-            coordinate={{ latitude: lastLocation.latitude, longitude: lastLocation.longitude }}
-            title="Vilda"
-          />
-        </MapView>
+          source={{ uri: staticMapUrl(lastLocation.latitude, lastLocation.longitude) }}
+        />
       )}
 
       <Text style={styles.sectionTitle}>Senaste</Text>
