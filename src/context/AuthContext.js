@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { registerForPushNotifications } from '../lib/pushNotifications';
 
 const AuthContext = createContext(null);
 
@@ -31,6 +32,7 @@ export function AuthProvider({ children }) {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
     setProfile(data);
     setLoading(false);
+    if (data) registerForPushNotifications(data.id).catch(() => {});
   }
 
   async function signIn(email, password) {

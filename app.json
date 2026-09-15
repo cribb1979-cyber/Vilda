@@ -37,6 +37,12 @@
           "photosPermission": "Vilda behöver tillgång till dina bilder för att du ska kunna skicka bilder i chatten.",
           "cameraPermission": "Vilda behöver kameran för att du ska kunna ta och skicka bilder i chatten."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#7C3AED"
+        }
       ]
     ]
   }

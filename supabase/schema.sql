@@ -8,6 +8,7 @@ create table profiles (
   id uuid references auth.users on delete cascade primary key,
   role text not null check (role in ('parent', 'child')),
   display_name text not null,
+  push_token text,
   created_at timestamptz default now()
 );
 
