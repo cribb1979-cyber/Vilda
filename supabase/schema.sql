@@ -130,7 +130,7 @@ create policy "Familjemedlemmar kan uppdatera larm (t.ex. markera löst)"
 -- ============================================
 create table saved_places (
   id uuid default gen_random_uuid() primary key,
-  label text not null, -- 'hem', 'skola'
+  label text not null unique, -- 'hem', 'skola'
   latitude double precision not null,
   longitude double precision not null,
   radius_meters integer default 100,

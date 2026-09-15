@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Alert } from 'react-native';
 import * as Location from 'expo-location';
 import * as Battery from 'expo-battery';
 import * as Speech from 'expo-speech';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import SetHomeScreen from './SetHomeScreen';
 
 const FEELINGS = [
   { key: 'vilse', label: '🧭 Jag är vilse' },
@@ -19,6 +20,7 @@ const CALM_MESSAGE =
 export default function ChildScreen() {
   const { profile, signOut } = useAuth();
   const [worriedVisible, setWorriedVisible] = useState(false);
+  const [setHomeVisible, setSetHomeVisible] = useState(false);
   const [homeDirection, setHomeDirection] = useState(null); // { bearingLabel, distanceMeters }
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -91,9 +93,12 @@ export default function ChildScreen() {
       .from('saved_places')
       .select('*')
       .eq('label', 'hem')
-      .single();
+      .maybeSingle();
 
-    if (!home) return;
+    if (!home) {
+      Alert.alert('Ingen hemplats sparad', 'Tryck på "Ställ in hem" för att välja var ni bor.');
+      return;
+    }
 
     const distance = getDistanceMeters(
       loc.coords.latitude,
@@ -136,6 +141,12 @@ export default function ChildScreen() {
       <TouchableOpacity style={styles.findHomeButton} onPress={findWayHome}>
         <Text style={styles.findHomeText}>🧭 Hjälp mig hitta hem</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity style={styles.setHomeButton} onPress={() => setSetHomeVisible(true)}>
+        <Text style={styles.setHomeText}>🏠 Ställ in hem</Text>
+      </TouchableOpacity>
+
+      <SetHomeScreen visible={setHomeVisible} onClose={() => setSetHomeVisible(false)} />
 
       <TouchableOpacity style={styles.worriedButton} onPress={() => setWorriedVisible(true)}>
         <Text style={styles.worriedText}>💛 Jag känner mig orolig</Text>
@@ -235,6 +246,13 @@ const styles = StyleSheet.create({
     borderColor: '#C4B5FD',
   },
   findHomeText: { textAlign: 'center', fontSize: 17, fontWeight: '600', color: '#6D28D9' },
+  setHomeButton: {
+    backgroundColor: '#EDE9FE',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+  },
+  setHomeText: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#6D28D9' },
   worriedButton: {
     backgroundColor: '#FEF3C7',
     borderRadius: 16,
