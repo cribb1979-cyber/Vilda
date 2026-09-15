@@ -8,11 +8,10 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
-  Image,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
-import { staticMapUrl } from '../lib/staticMap';
+import { openInMaps } from '../lib/maps';
 
 const STOCKHOLM = { latitude: 59.3293, longitude: 18.0686 };
 
@@ -129,7 +128,18 @@ export default function SetHomeScreen({ visible, onClose }) {
           </View>
         ) : (
           marker && (
-            <Image style={styles.map} source={{ uri: staticMapUrl(marker.latitude, marker.longitude) }} />
+            <View style={styles.previewCard}>
+              <Text style={styles.previewLabel}>Vald plats</Text>
+              <Text style={styles.previewCoords}>
+                {marker.latitude.toFixed(5)}, {marker.longitude.toFixed(5)}
+              </Text>
+              <TouchableOpacity
+                style={styles.previewButton}
+                onPress={() => openInMaps(marker.latitude, marker.longitude, 'Hem')}
+              >
+                <Text style={styles.previewButtonText}>🔍 Förhandsgranska på karta</Text>
+              </TouchableOpacity>
+            </View>
           )
         )}
 
@@ -173,8 +183,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   searchButtonText: { color: '#fff', fontWeight: '600' },
-  map: { flex: 1, borderRadius: 16, marginBottom: 14 },
   mapLoading: { flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+  previewCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewLabel: { color: '#7C3AED', fontSize: 14 },
+  previewCoords: { fontSize: 16, fontWeight: '600', color: '#4C1D95', marginTop: 4, marginBottom: 16 },
+  previewButton: { backgroundColor: '#EDE9FE', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 20 },
+  previewButtonText: { fontSize: 15, fontWeight: '600', color: '#6D28D9' },
   locationButton: {
     backgroundColor: '#fff',
     borderRadius: 14,

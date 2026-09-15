@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { staticMapUrl } from '../lib/staticMap';
+import { openInMaps } from '../lib/maps';
 import ChatScreen from './ChatScreen';
 
 export default function ParentScreen() {
@@ -92,18 +92,17 @@ export default function ParentScreen() {
               🔋 {lastLocation.battery_level ?? '–'}%
               {lastLocation.is_charging ? ' (laddar)' : ''}
             </Text>
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={() => openInMaps(lastLocation.latitude, lastLocation.longitude, 'Vilda')}
+            >
+              <Text style={styles.mapButtonText}>📍 Visa på karta</Text>
+            </TouchableOpacity>
           </>
         ) : (
           <Text style={styles.statusValue}>Väntar på position...</Text>
         )}
       </View>
-
-      {lastLocation && (
-        <Image
-          style={styles.map}
-          source={{ uri: staticMapUrl(lastLocation.latitude, lastLocation.longitude) }}
-        />
-      )}
 
       <Text style={styles.sectionTitle}>Larm & känslor</Text>
       <FlatList
@@ -146,7 +145,13 @@ const styles = StyleSheet.create({
   statusLabel: { color: '#7C3AED', fontSize: 14 },
   statusValue: { fontSize: 22, fontWeight: '600', marginTop: 4 },
   batteryText: { marginTop: 8, fontSize: 16, color: '#444' },
-  map: { height: 220, borderRadius: 16, overflow: 'hidden', marginBottom: 24 },
+  mapButton: {
+    backgroundColor: '#EDE9FE',
+    borderRadius: 12,
+    paddingVertical: 10,
+    marginTop: 14,
+  },
+  mapButtonText: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#6D28D9' },
   sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 10, color: '#4C1D95' },
   eventRow: {
     flexDirection: 'row',
