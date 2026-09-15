@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Vilda",
+    "slug": "vilda-trygghetsapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.familjen.vilda",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Vilda behöver din position för att visa var du är på kartan och hjälpa dig hitta hem eller till skolan.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Vilda behöver din position även i bakgrunden under resan så att pappa kan se att du kommit fram tryggt.",
+        "UIBackgroundModes": ["location", "remote-notification"]
+      }
+    },
+    "android": {
+      "package": "com.familjen.vilda",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Vilda behöver din position för att visa var du är och hjälpa dig hitta hem eller till skolan."
+        }
+      ]
+    ]
+  }
+}
