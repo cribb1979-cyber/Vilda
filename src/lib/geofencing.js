@@ -24,17 +24,21 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
 export async function startGeofencing(places) {
   if (!places.length) return;
 
-  const { status } = await Location.requestBackgroundPermissionsAsync();
-  if (status !== 'granted') return;
+  try {
+    const { status } = await Location.requestBackgroundPermissionsAsync();
+    if (status !== 'granted') return;
 
-  const regions = places.map((place) => ({
-    identifier: place.label,
-    latitude: place.latitude,
-    longitude: place.longitude,
-    radius: place.radius_meters || 100,
-    notifyOnEnter: true,
-    notifyOnExit: false,
-  }));
+    const regions = places.map((place) => ({
+      identifier: place.label,
+      latitude: place.latitude,
+      longitude: place.longitude,
+      radius: place.radius_meters || 100,
+      notifyOnEnter: true,
+      notifyOnExit: false,
+    }));
 
-  await Location.startGeofencingAsync(GEOFENCE_TASK, regions);
+    await Location.startGeofencingAsync(GEOFENCE_TASK, regions);
+  } catch (e) {
+    // Bakgrundsbevakning kräver en EAS-utvecklingsbygge, funkar inte i Expo Go.
+  }
 }
