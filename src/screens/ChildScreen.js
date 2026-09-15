@@ -5,7 +5,8 @@ import * as Battery from 'expo-battery';
 import * as Speech from 'expo-speech';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import SetHomeScreen from './SetHomeScreen';
+import { startGeofencing } from '../lib/geofencing';
+import SavedPlaceScreen from './SavedPlaceScreen';
 import ChatScreen from './ChatScreen';
 
 const FEELINGS = [
@@ -22,13 +23,20 @@ export default function ChildScreen() {
   const { profile, signOut } = useAuth();
   const [worriedVisible, setWorriedVisible] = useState(false);
   const [setHomeVisible, setSetHomeVisible] = useState(false);
+  const [setSchoolVisible, setSetSchoolVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
   const [homeDirection, setHomeDirection] = useState(null); // { bearingLabel, distanceMeters }
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     startTracking();
+    refreshGeofencing();
   }, []);
+
+  async function refreshGeofencing() {
+    const { data } = await supabase.from('saved_places').select('*').in('label', ['hem', 'skola']);
+    if (data?.length) startGeofencing(data);
+  }
 
   async function startTracking() {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -149,11 +157,33 @@ export default function ChildScreen() {
         <Text style={styles.findHomeText}>🧭 Hjälp mig hitta hem</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.setHomeButton} onPress={() => setSetHomeVisible(true)}>
-        <Text style={styles.setHomeText}>🏠 Ställ in hem</Text>
-      </TouchableOpacity>
+      <View style={styles.placeButtonRow}>
+        <TouchableOpacity style={styles.setHomeButton} onPress={() => setSetHomeVisible(true)}>
+          <Text style={styles.setHomeText}>🏠 Ställ in hem</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.setHomeButton} onPress={() => setSetSchoolVisible(true)}>
+          <Text style={styles.setHomeText}>🏫 Ställ in skola</Text>
+        </TouchableOpacity>
+      </View>
 
-      <SetHomeScreen visible={setHomeVisible} onClose={() => setSetHomeVisible(false)} />
+      <SavedPlaceScreen
+        visible={setHomeVisible}
+        onClose={() => setSetHomeVisible(false)}
+        onSaved={refreshGeofencing}
+        label="hem"
+        icon="🏠"
+        title="Ställ in hem"
+        name="Hemplatsen"
+      />
+      <SavedPlaceScreen
+        visible={setSchoolVisible}
+        onClose={() => setSetSchoolVisible(false)}
+        onSaved={refreshGeofencing}
+        label="skola"
+        icon="🏫"
+        title="Ställ in skola"
+        name="Skolplatsen"
+      />
       <ChatScreen visible={chatVisible} onClose={() => setChatVisible(false)} />
 
       <TouchableOpacity style={styles.worriedButton} onPress={() => setWorriedVisible(true)}>
@@ -256,11 +286,12 @@ const styles = StyleSheet.create({
     borderColor: '#C4B5FD',
   },
   findHomeText: { textAlign: 'center', fontSize: 17, fontWeight: '600', color: '#6D28D9' },
+  placeButtonRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
   setHomeButton: {
+    flex: 1,
     backgroundColor: '#EDE9FE',
     borderRadius: 16,
     padding: 14,
-    marginBottom: 14,
   },
   setHomeText: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#6D28D9' },
   worriedButton: {

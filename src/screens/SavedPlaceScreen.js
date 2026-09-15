@@ -15,7 +15,7 @@ import { openInMaps } from '../lib/maps';
 
 const STOCKHOLM = { latitude: 59.3293, longitude: 18.0686 };
 
-export default function SetHomeScreen({ visible, onClose }) {
+export default function SavedPlaceScreen({ visible, onClose, onSaved, label, icon, title, name }) {
   const [marker, setMarker] = useState(null);
   const [address, setAddress] = useState('');
   const [loadingInitial, setLoadingInitial] = useState(true);
@@ -28,14 +28,14 @@ export default function SetHomeScreen({ visible, onClose }) {
 
   async function loadInitial() {
     setLoadingInitial(true);
-    const { data: home } = await supabase
+    const { data: place } = await supabase
       .from('saved_places')
       .select('*')
-      .eq('label', 'hem')
+      .eq('label', label)
       .maybeSingle();
 
-    if (home) {
-      setMarker({ latitude: home.latitude, longitude: home.longitude });
+    if (place) {
+      setMarker({ latitude: place.latitude, longitude: place.longitude });
       setLoadingInitial(false);
       return;
     }
@@ -84,7 +84,7 @@ export default function SetHomeScreen({ visible, onClose }) {
     const { error } = await supabase
       .from('saved_places')
       .upsert(
-        { label: 'hem', latitude: marker.latitude, longitude: marker.longitude },
+        { label, latitude: marker.latitude, longitude: marker.longitude },
         { onConflict: 'label' }
       );
     setSaving(false);
@@ -92,7 +92,8 @@ export default function SetHomeScreen({ visible, onClose }) {
       Alert.alert('Kunde inte spara', error.message);
       return;
     }
-    Alert.alert('Klart!', 'Hemplatsen är sparad.');
+    Alert.alert('Klart!', `${name} är sparad.`);
+    onSaved?.();
     onClose();
   }
 
@@ -100,7 +101,9 @@ export default function SetHomeScreen({ visible, onClose }) {
     <Modal visible={visible} animationType="slide">
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>🏠 Ställ in hem</Text>
+          <Text style={styles.title}>
+            {icon} {title}
+          </Text>
           <TouchableOpacity onPress={onClose}>
             <Text style={styles.closeText}>Stäng</Text>
           </TouchableOpacity>
@@ -135,7 +138,7 @@ export default function SetHomeScreen({ visible, onClose }) {
               </Text>
               <TouchableOpacity
                 style={styles.previewButton}
-                onPress={() => openInMaps(marker.latitude, marker.longitude, 'Hem')}
+                onPress={() => openInMaps(marker.latitude, marker.longitude, name)}
               >
                 <Text style={styles.previewButtonText}>🔍 Förhandsgranska på karta</Text>
               </TouchableOpacity>
@@ -152,7 +155,7 @@ export default function SetHomeScreen({ visible, onClose }) {
           onPress={handleSave}
           disabled={!marker || saving}
         >
-          <Text style={styles.saveButtonText}>{saving ? 'Sparar...' : '💜 Spara som hem'}</Text>
+          <Text style={styles.saveButtonText}>{saving ? 'Sparar...' : `💜 Spara som ${name.toLowerCase()}`}</Text>
         </TouchableOpacity>
       </View>
     </Modal>

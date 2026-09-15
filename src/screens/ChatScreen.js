@@ -174,6 +174,14 @@ export default function ChatScreen({ visible, onClose }) {
 }
 
 function MessageBubble({ item, isMine }) {
+  if (item.message_type === 'arrived') {
+    return (
+      <View style={styles.systemRow}>
+        <Text style={styles.systemText}>✅ {item.content}</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.bubbleRow, isMine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}>
       <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
@@ -207,6 +215,16 @@ const styles = StyleSheet.create({
   bubbleText: { fontSize: 15, color: '#333' },
   bubbleTextMine: { color: '#fff' },
   bubbleImage: { width: 200, height: 200, borderRadius: 10 },
+  systemRow: { alignItems: 'center', marginBottom: 8, paddingHorizontal: 16 },
+  systemText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4C1D95',
+    backgroundColor: '#EDE9FE',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',

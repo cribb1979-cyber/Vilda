@@ -30,8 +30,13 @@ Deno.serve(async (req) => {
     body = isSos ? 'Öppna appen för att se var hon är.' : record.feeling || 'Öppna appen för att se mer.';
   } else if (table === 'messages') {
     senderId = record.sender_id;
-    title = '💬 Nytt meddelande';
-    body = record.message_type === 'image' ? '📷 Skickade en bild' : record.content;
+    if (record.message_type === 'arrived') {
+      title = '✅ Kommit fram';
+      body = record.content;
+    } else {
+      title = '💬 Nytt meddelande';
+      body = record.message_type === 'image' ? '📷 Skickade en bild' : record.content;
+    }
   } else {
     return new Response('ignored', { status: 200 });
   }
