@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Modal, Swit
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { startBackgroundLocationTracking, stopBackgroundLocationTracking } from '../lib/backgroundLocation';
+import { startGeofencing } from '../lib/geofencing';
 
 export default function SettingsScreen({ visible, onClose }) {
   const { profile } = useAuth();
@@ -67,6 +68,8 @@ export default function SettingsScreen({ visible, onClose }) {
 
     if (value) {
       startBackgroundLocationTracking();
+      const { data: home } = await supabase.from('saved_places').select('*').eq('label', 'hem').maybeSingle();
+      if (home) startGeofencing([home]);
     } else {
       stopBackgroundLocationTracking();
     }

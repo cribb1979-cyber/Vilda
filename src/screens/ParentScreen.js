@@ -4,12 +4,13 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { openInMaps } from '../lib/maps';
 import { fetchAppDisplayName } from '../lib/appSettings';
+import { startGeofencing } from '../lib/geofencing';
 import ChatScreen from './ChatScreen';
 import SettingsScreen from './SettingsScreen';
 import FamilyMapScreen from './FamilyMapScreen';
 
 export default function ParentScreen() {
-  const { signOut } = useAuth();
+  const { signOut, profile } = useAuth();
   const [lastLocation, setLastLocation] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [chatVisible, setChatVisible] = useState(false);
@@ -21,6 +22,7 @@ export default function ParentScreen() {
   useEffect(() => {
     loadLatest();
     fetchAppDisplayName().then(setDisplayName);
+    if (profile?.location_sharing_enabled) refreshHomeGeofencing();
 
     supabase
       .from('profiles')
@@ -53,6 +55,11 @@ export default function ParentScreen() {
       supabase.removeChannel(settingsChannel);
     };
   }, []);
+
+  async function refreshHomeGeofencing() {
+    const { data } = await supabase.from('saved_places').select('*').eq('label', 'hem').maybeSingle();
+    if (data) startGeofencing([data]);
+  }
 
   async function loadLatest() {
     const { data: loc } = await supabase
