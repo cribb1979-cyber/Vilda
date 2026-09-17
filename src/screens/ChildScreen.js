@@ -6,6 +6,7 @@ import * as Speech from 'expo-speech';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { startGeofencing } from '../lib/geofencing';
+import { callNumber, openWalkingDirections } from '../lib/maps';
 import SavedPlaceScreen from './SavedPlaceScreen';
 import ChatScreen from './ChatScreen';
 
@@ -26,12 +27,58 @@ export default function ChildScreen() {
   const [setSchoolVisible, setSetSchoolVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
   const [homeDirection, setHomeDirection] = useState(null); // { bearingLabel, distanceMeters }
+  const [todayNote, setTodayNote] = useState(null);
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     startTracking();
     refreshGeofencing();
+    loadTodayNote();
+
+    const channel = supabase
+      .channel('today-note-child')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'today_note' }, (payload) => {
+        setTodayNote(payload.new?.content || null);
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
   }, []);
+
+  async function loadTodayNote() {
+    const { data } = await supabase.from('today_note').select('*').eq('id', 1).maybeSingle();
+    setTodayNote(data?.content || null);
+  }
+
+  async function handleCallParent() {
+    const { data: parent } = await supabase
+      .from('profiles')
+      .select('phone_number')
+      .eq('role', 'parent')
+      .not('phone_number', 'is', null)
+      .limit(1)
+      .maybeSingle();
+
+    if (!parent?.phone_number) {
+      Alert.alert('Inget nummer sparat', 'Pappa har inte lagt in sitt telefonnummer än.');
+      return;
+    }
+    callNumber(parent.phone_number);
+  }
+
+  async function handleDirections(label, placeName) {
+    const { data: place } = await supabase
+      .from('saved_places')
+      .select('*')
+      .eq('label', label)
+      .maybeSingle();
+
+    if (!place) {
+      Alert.alert(`Ingen ${placeName} sparad`, `Tryck på "Ställ in ${placeName}" för att välja platsen.`);
+      return;
+    }
+    openWalkingDirections(place.latitude, place.longitude, placeName);
+  }
 
   async function refreshGeofencing() {
     const { data } = await supabase.from('saved_places').select('*').in('label', ['hem', 'skola']);
@@ -146,6 +193,13 @@ export default function ChildScreen() {
 
       <Text style={styles.helper}>Pappa ser var du är just nu 📍</Text>
 
+      {todayNote && (
+        <View style={styles.todayCard}>
+          <Text style={styles.todayLabel}>📅 Idag</Text>
+          <Text style={styles.todayText}>{todayNote}</Text>
+        </View>
+      )}
+
       {homeDirection && (
         <View style={styles.homeCard}>
           <Text style={styles.homeArrow}>{homeDirection.arrow}</Text>
@@ -163,6 +217,15 @@ export default function ChildScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.setHomeButton} onPress={() => setSetSchoolVisible(true)}>
           <Text style={styles.setHomeText}>🏫 Ställ in skola</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.placeButtonRow}>
+        <TouchableOpacity style={styles.directionsButton} onPress={() => handleDirections('hem', 'hem')}>
+          <Text style={styles.directionsText}>🗺️ Vägbeskrivning hem</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.directionsButton} onPress={() => handleDirections('skola', 'skola')}>
+          <Text style={styles.directionsText}>🗺️ Vägbeskrivning skola</Text>
         </TouchableOpacity>
       </View>
 
@@ -216,12 +279,7 @@ export default function ChildScreen() {
               <Text style={styles.calmButtonText}>🔊 Lyssna på en lugnande röst</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.callButton}
-              onPress={() => {
-                /* Länka till Linking.openURL('tel:PAPPAS_NUMMER') här */
-              }}
-            >
+            <TouchableOpacity style={styles.callButton} onPress={handleCallParent}>
               <Text style={styles.callButtonText}>📞 Ring pappa</Text>
             </TouchableOpacity>
 
@@ -268,6 +326,14 @@ const styles = StyleSheet.create({
   chatLink: { color: '#7C3AED', fontSize: 14, fontWeight: '600' },
   logout: { color: '#7C3AED', fontSize: 14 },
   helper: { color: '#7C3AED', marginTop: 6, marginBottom: 30 },
+  todayCard: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  todayLabel: { color: '#92400E', fontSize: 13, fontWeight: '600', marginBottom: 4 },
+  todayText: { color: '#78350F', fontSize: 16, fontWeight: '500' },
   homeCard: {
     backgroundColor: '#EDE9FE',
     borderRadius: 16,
@@ -294,6 +360,15 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   setHomeText: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#6D28D9' },
+  directionsButton: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  directionsText: { textAlign: 'center', fontSize: 13, fontWeight: '600', color: '#6D28D9' },
   worriedButton: {
     backgroundColor: '#FEF3C7',
     borderRadius: 16,

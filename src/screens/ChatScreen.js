@@ -12,11 +12,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { File } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+
+const PARENT_QUICK_MESSAGES = [
+  '👀 Jag ser dig',
+  '🎉 Bra jobbat, du är framme!',
+  '❤️ Älskar dig',
+  '📞 Ring mig när du kan',
+];
 
 export default function ChatScreen({ visible, onClose }) {
   const { profile } = useAuth();
@@ -55,18 +63,21 @@ export default function ChatScreen({ visible, onClose }) {
 
   async function sendText() {
     if (!text.trim()) return;
+    await sendMessage(text.trim());
+    setText('');
+  }
+
+  async function sendMessage(content) {
     setSending(true);
     const { error } = await supabase.from('messages').insert({
       sender_id: profile.id,
-      content: text.trim(),
+      content,
       message_type: 'text',
     });
     setSending(false);
     if (error) {
       Alert.alert('Kunde inte skicka', error.message);
-      return;
     }
-    setText('');
   }
 
   function pickImage() {
@@ -148,6 +159,25 @@ export default function ChatScreen({ visible, onClose }) {
           contentContainerStyle={{ paddingVertical: 12 }}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         />
+
+        {profile?.role === 'parent' && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickRow}
+          >
+            {PARENT_QUICK_MESSAGES.map((msg) => (
+              <TouchableOpacity
+                key={msg}
+                style={styles.quickButton}
+                onPress={() => sendMessage(msg)}
+                disabled={sending}
+              >
+                <Text style={styles.quickButtonText}>{msg}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
 
         <View style={styles.inputRow}>
           <TouchableOpacity style={styles.imageButton} onPress={pickImage} disabled={uploading}>
@@ -262,4 +292,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  quickRow: { paddingHorizontal: 12, paddingTop: 8, gap: 8 },
+  quickButton: {
+    backgroundColor: '#EDE9FE',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  quickButtonText: { fontSize: 13, fontWeight: '600', color: '#6D28D9' },
 });

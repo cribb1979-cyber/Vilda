@@ -4,12 +4,14 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { openInMaps } from '../lib/maps';
 import ChatScreen from './ChatScreen';
+import SettingsScreen from './SettingsScreen';
 
 export default function ParentScreen() {
   const { signOut } = useAuth();
   const [lastLocation, setLastLocation] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [chatVisible, setChatVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
 
   useEffect(() => {
     loadLatest();
@@ -75,6 +77,9 @@ export default function ParentScreen() {
           <TouchableOpacity onPress={() => setChatVisible(true)}>
             <Text style={styles.chatLink}>💬 Chatt</Text>
           </TouchableOpacity>
+          <TouchableOpacity onPress={() => setSettingsVisible(true)}>
+            <Text style={styles.chatLink}>⚙️</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={signOut}>
             <Text style={styles.logout}>Logga ut</Text>
           </TouchableOpacity>
@@ -113,6 +118,7 @@ export default function ParentScreen() {
       />
 
       <ChatScreen visible={chatVisible} onClose={() => setChatVisible(false)} />
+      <SettingsScreen visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
     </View>
   );
 }

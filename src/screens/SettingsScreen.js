@@ -1,0 +1,115 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Modal } from 'react-native';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
+
+export default function SettingsScreen({ visible, onClose }) {
+  const { profile } = useAuth();
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [todayNote, setTodayNote] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
+
+  useEffect(() => {
+    if (visible) loadSettings();
+  }, [visible]);
+
+  async function loadSettings() {
+    const { data: freshProfile } = await supabase
+      .from('profiles')
+      .select('phone_number')
+      .eq('id', profile.id)
+      .maybeSingle();
+    setPhoneNumber(freshProfile?.phone_number || '');
+
+    const { data } = await supabase.from('today_note').select('*').eq('id', 1).maybeSingle();
+    setTodayNote(data?.content || '');
+  }
+
+  async function handleSavePhone() {
+    setSavingPhone(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ phone_number: phoneNumber.trim() })
+      .eq('id', profile.id);
+    setSavingPhone(false);
+    if (error) {
+      Alert.alert('Kunde inte spara', error.message);
+      return;
+    }
+    Alert.alert('Klart!', 'Telefonnumret är sparat.');
+  }
+
+  async function handleSaveNote() {
+    setSavingNote(true);
+    const { error } = await supabase
+      .from('today_note')
+      .upsert({ id: 1, content: todayNote.trim(), updated_at: new Date().toISOString() });
+    setSavingNote(false);
+    if (error) {
+      Alert.alert('Kunde inte spara', error.message);
+      return;
+    }
+    Alert.alert('Klart!', 'Dagens notering är sparad.');
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide">
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>⚙️ Inställningar</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={styles.closeText}>Stäng</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.sectionLabel}>Mitt telefonnummer</Text>
+        <Text style={styles.helper}>Används för "Ring pappa"-knappen i Vildas app.</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="070-123 45 67"
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          keyboardType="phone-pad"
+        />
+        <TouchableOpacity style={styles.saveButton} onPress={handleSavePhone} disabled={savingPhone}>
+          <Text style={styles.saveButtonText}>{savingPhone ? 'Sparar...' : 'Spara nummer'}</Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.sectionLabel, { marginTop: 30 }]}>📅 Idag</Text>
+        <Text style={styles.helper}>Visas överst i Vildas app, t.ex. "Mormor hämtar dig idag".</Text>
+        <TextInput
+          style={[styles.input, styles.noteInput]}
+          placeholder="Skriv dagens notering..."
+          value={todayNote}
+          onChangeText={setTodayNote}
+          multiline
+        />
+        <TouchableOpacity style={styles.saveButton} onPress={handleSaveNote} disabled={savingNote}>
+          <Text style={styles.saveButtonText}>{savingNote ? 'Sparar...' : 'Spara notering'}</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F5F3FF', padding: 20, paddingTop: 60 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  title: { fontSize: 22, fontWeight: '700', color: '#6D28D9' },
+  closeText: { color: '#7C3AED', fontSize: 14 },
+  sectionLabel: { fontSize: 16, fontWeight: '700', color: '#4C1D95', marginBottom: 4 },
+  helper: { color: '#7C3AED', fontSize: 13, marginBottom: 10 },
+  input: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    marginBottom: 12,
+  },
+  noteInput: { minHeight: 90, textAlignVertical: 'top' },
+  saveButton: { backgroundColor: '#7C3AED', borderRadius: 14, padding: 16 },
+  saveButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#fff' },
+});

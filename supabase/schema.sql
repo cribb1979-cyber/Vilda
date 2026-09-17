@@ -9,6 +9,7 @@ create table profiles (
   role text not null check (role in ('parent', 'child')),
   display_name text not null,
   push_token text,
+  phone_number text,
   created_at timestamptz default now()
 );
 
@@ -169,9 +170,34 @@ create policy "Familjemedlemmar kan se chattbilder"
   using (bucket_id = 'chat-images');
 
 -- ============================================
+-- TODAY NOTE (en rad som föräldern skriver, t.ex. "Mormor hämtar dig idag")
+-- ============================================
+create table today_note (
+  id integer primary key default 1,
+  content text,
+  updated_at timestamptz default now(),
+  constraint today_note_singleton check (id = 1)
+);
+
+alter table today_note enable row level security;
+
+create policy "Familjemedlemmar kan se dagens notering"
+  on today_note for select
+  using (auth.uid() is not null);
+
+create policy "Familjemedlemmar kan skriva dagens notering"
+  on today_note for insert
+  with check (auth.uid() is not null);
+
+create policy "Familjemedlemmar kan uppdatera dagens notering"
+  on today_note for update
+  using (auth.uid() is not null);
+
+-- ============================================
 -- REALTIME (så appen får push direkt vid nya rader)
 -- ============================================
 alter publication supabase_realtime add table locations;
 alter publication supabase_realtime add table messages;
 alter publication supabase_realtime add table alerts;
 alter publication supabase_realtime add table trips;
+alter publication supabase_realtime add table today_note;
