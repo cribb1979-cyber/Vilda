@@ -10,6 +10,7 @@ create table profiles (
   display_name text not null,
   push_token text,
   phone_number text,
+  location_sharing_enabled boolean not null default false,
   created_at timestamptz default now()
 );
 

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { openInMaps } from '../lib/maps';
 import ChatScreen from './ChatScreen';
 import SettingsScreen from './SettingsScreen';
+import FamilyMapScreen from './FamilyMapScreen';
 
 export default function ParentScreen() {
   const { signOut } = useAuth();
@@ -12,6 +13,7 @@ export default function ParentScreen() {
   const [alerts, setAlerts] = useState([]);
   const [chatVisible, setChatVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [familyMapVisible, setFamilyMapVisible] = useState(false);
 
   useEffect(() => {
     loadLatest();
@@ -109,6 +111,10 @@ export default function ParentScreen() {
         )}
       </View>
 
+      <TouchableOpacity style={styles.familyMapButton} onPress={() => setFamilyMapVisible(true)}>
+        <Text style={styles.familyMapButtonText}>🗺️ Familjekarta</Text>
+      </TouchableOpacity>
+
       <Text style={styles.sectionTitle}>Larm & känslor</Text>
       <FlatList
         data={alerts}
@@ -119,6 +125,7 @@ export default function ParentScreen() {
 
       <ChatScreen visible={chatVisible} onClose={() => setChatVisible(false)} />
       <SettingsScreen visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
+      <FamilyMapScreen visible={familyMapVisible} onClose={() => setFamilyMapVisible(false)} />
     </View>
   );
 }
@@ -158,6 +165,15 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   mapButtonText: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#6D28D9' },
+  familyMapButton: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#C4B5FD',
+  },
+  familyMapButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#6D28D9' },
   sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 10, color: '#4C1D95' },
   eventRow: {
     flexDirection: 'row',

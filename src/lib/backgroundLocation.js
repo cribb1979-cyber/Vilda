@@ -49,3 +49,14 @@ export async function startBackgroundLocationTracking() {
     // Bakgrundsspårning kräver en EAS-utvecklingsbygge, funkar inte i Expo Go.
   }
 }
+
+export async function stopBackgroundLocationTracking() {
+  try {
+    const alreadyStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
+    if (alreadyStarted) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK);
+    }
+  } catch (e) {
+    // Ingenting att stoppa.
+  }
+}

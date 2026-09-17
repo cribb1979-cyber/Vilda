@@ -8,8 +8,10 @@ import { useAuth } from '../context/AuthContext';
 import { startGeofencing } from '../lib/geofencing';
 import { startBackgroundLocationTracking } from '../lib/backgroundLocation';
 import { callNumber, openWalkingDirections } from '../lib/maps';
+import { getDistanceMeters, formatDistance } from '../lib/distance';
 import SavedPlaceScreen from './SavedPlaceScreen';
 import ChatScreen from './ChatScreen';
+import FamilyMapScreen from './FamilyMapScreen';
 
 const FEELINGS = [
   { key: 'vilse', label: '🧭 Jag är vilse' },
@@ -29,6 +31,7 @@ export default function ChildScreen() {
   const [chatVisible, setChatVisible] = useState(false);
   const [homeDirection, setHomeDirection] = useState(null); // { bearingLabel, distanceMeters }
   const [todayNote, setTodayNote] = useState(null);
+  const [familyMapVisible, setFamilyMapVisible] = useState(false);
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -172,8 +175,7 @@ export default function ChildScreen() {
 
     setHomeDirection({
       arrow: bearingToArrow(bearing),
-      distanceLabel:
-        distance < 1000 ? `${Math.round(distance)} meter` : `${(distance / 1000).toFixed(1)} km`,
+      distanceLabel: formatDistance(distance),
     });
   }
 
@@ -192,6 +194,11 @@ export default function ChildScreen() {
       </View>
 
       <Text style={styles.helper}>Pappa ser var du är just nu 📍</Text>
+
+      <TouchableOpacity style={styles.mapButton} onPress={() => setFamilyMapVisible(true)}>
+        <Text style={styles.mapButtonText}>🗺️ Familjekarta</Text>
+      </TouchableOpacity>
+      <FamilyMapScreen visible={familyMapVisible} onClose={() => setFamilyMapVisible(false)} />
 
       {todayNote && (
         <View style={styles.todayCard}>
@@ -294,16 +301,6 @@ export default function ChildScreen() {
 }
 
 // --- Enkel geometri för "hitta hem"-pilen ---
-function getDistanceMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 function getBearing(lat1, lon1, lat2, lon2) {
   const toRad = (d) => (d * Math.PI) / 180;
   const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
@@ -325,7 +322,16 @@ const styles = StyleSheet.create({
   headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   chatLink: { color: '#7C3AED', fontSize: 14, fontWeight: '600' },
   logout: { color: '#7C3AED', fontSize: 14 },
-  helper: { color: '#7C3AED', marginTop: 6, marginBottom: 30 },
+  helper: { color: '#7C3AED', marginTop: 6, marginBottom: 14 },
+  mapButton: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#C4B5FD',
+  },
+  mapButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#6D28D9' },
   todayCard: {
     backgroundColor: '#FEF3C7',
     borderRadius: 16,

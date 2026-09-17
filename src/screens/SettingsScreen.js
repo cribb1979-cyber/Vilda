@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Modal, Switch } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { startBackgroundLocationTracking, stopBackgroundLocationTracking } from '../lib/backgroundLocation';
 
 export default function SettingsScreen({ visible, onClose }) {
   const { profile } = useAuth();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [todayNote, setTodayNote] = useState('');
+  const [locationSharing, setLocationSharing] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
 
@@ -17,13 +19,34 @@ export default function SettingsScreen({ visible, onClose }) {
   async function loadSettings() {
     const { data: freshProfile } = await supabase
       .from('profiles')
-      .select('phone_number')
+      .select('phone_number, location_sharing_enabled')
       .eq('id', profile.id)
       .maybeSingle();
     setPhoneNumber(freshProfile?.phone_number || '');
+    setLocationSharing(freshProfile?.location_sharing_enabled || false);
 
     const { data } = await supabase.from('today_note').select('*').eq('id', 1).maybeSingle();
     setTodayNote(data?.content || '');
+  }
+
+  async function handleToggleLocationSharing(value) {
+    setLocationSharing(value);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ location_sharing_enabled: value })
+      .eq('id', profile.id);
+
+    if (error) {
+      setLocationSharing(!value);
+      Alert.alert('Kunde inte ändra', error.message);
+      return;
+    }
+
+    if (value) {
+      startBackgroundLocationTracking();
+    } else {
+      stopBackgroundLocationTracking();
+    }
   }
 
   async function handleSavePhone() {
@@ -88,6 +111,18 @@ export default function SettingsScreen({ visible, onClose }) {
         <TouchableOpacity style={styles.saveButton} onPress={handleSaveNote} disabled={savingNote}>
           <Text style={styles.saveButtonText}>{savingNote ? 'Sparar...' : 'Spara notering'}</Text>
         </TouchableOpacity>
+
+        <View style={styles.shareRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.sectionLabel}>📍 Dela min position</Text>
+            <Text style={styles.helper}>Visar dig på Vildas familjekarta.</Text>
+          </View>
+          <Switch
+            value={locationSharing}
+            onValueChange={handleToggleLocationSharing}
+            trackColor={{ true: '#7C3AED' }}
+          />
+        </View>
       </View>
     </Modal>
   );
@@ -112,4 +147,12 @@ const styles = StyleSheet.create({
   noteInput: { minHeight: 90, textAlignVertical: 'top' },
   saveButton: { backgroundColor: '#7C3AED', borderRadius: 14, padding: 16 },
   saveButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#fff' },
+  shareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 30,
+  },
 });
