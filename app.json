@@ -33,7 +33,9 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Vilda behöver din position för att visa var du är och hjälpa dig hitta hem eller till skolan."
+          "locationAlwaysAndWhenInUsePermission": "Vilda behöver din position för att visa var du är och hjälpa dig hitta hem eller till skolan.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [

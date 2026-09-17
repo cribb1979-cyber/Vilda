@@ -6,6 +6,7 @@ import * as Speech from 'expo-speech';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { startGeofencing } from '../lib/geofencing';
+import { startBackgroundLocationTracking } from '../lib/backgroundLocation';
 import { callNumber, openWalkingDirections } from '../lib/maps';
 import SavedPlaceScreen from './SavedPlaceScreen';
 import ChatScreen from './ChatScreen';
@@ -89,11 +90,10 @@ export default function ChildScreen() {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return;
 
-    // Skicka position + batteri var 30:e sekund medan appen är öppen.
-    // För riktig bakgrundsspårning under hela resan, lägg till
-    // Location.startLocationUpdatesAsync med en TaskManager-task här.
-    setInterval(sendLocationUpdate, 30000);
+    // Skicka en position direkt, sen tar bakgrundsspårningen över
+    // (fortsätter även när appen är stängd eller telefonen låst).
     sendLocationUpdate();
+    startBackgroundLocationTracking();
   }
 
   async function sendLocationUpdate() {
