@@ -18,11 +18,20 @@ export default function ParentScreen() {
   const [familyMapVisible, setFamilyMapVisible] = useState(false);
   const [displayName, setDisplayName] = useState('Vilda');
   const [childName, setChildName] = useState('');
+  const [todayNote, setTodayNote] = useState(null);
 
   useEffect(() => {
     loadLatest();
+    loadTodayNote();
     fetchAppDisplayName().then(setDisplayName);
     if (profile?.location_sharing_enabled) refreshHomeGeofencing();
+
+    const todayNoteChannel = supabase
+      .channel('today-note-parent')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'today_note' }, (payload) => {
+        setTodayNote(payload.new?.content || null);
+      })
+      .subscribe();
 
     supabase
       .from('profiles')
@@ -53,12 +62,18 @@ export default function ParentScreen() {
     return () => {
       supabase.removeChannel(channel);
       supabase.removeChannel(settingsChannel);
+      supabase.removeChannel(todayNoteChannel);
     };
   }, []);
 
   async function refreshHomeGeofencing() {
     const { data } = await supabase.from('saved_places').select('*').eq('label', 'hem').maybeSingle();
     if (data) startGeofencing([data]);
+  }
+
+  async function loadTodayNote() {
+    const { data } = await supabase.from('today_note').select('*').eq('id', 1).maybeSingle();
+    setTodayNote(data?.content || null);
   }
 
   async function loadLatest() {
@@ -140,6 +155,13 @@ export default function ParentScreen() {
         )}
       </View>
 
+      {todayNote && (
+        <View style={styles.todayCard}>
+          <Text style={styles.todayLabel}>📅 Dagens notering</Text>
+          <Text style={styles.todayText}>{todayNote}</Text>
+        </View>
+      )}
+
       <TouchableOpacity style={styles.familyMapButton} onPress={() => setFamilyMapVisible(true)}>
         <Text style={styles.familyMapButtonText}>🗺️ Familjekarta</Text>
       </TouchableOpacity>
@@ -194,6 +216,14 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   mapButtonText: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#6D28D9' },
+  todayCard: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+  },
+  todayLabel: { color: '#92400E', fontSize: 13, fontWeight: '600', marginBottom: 4 },
+  todayText: { color: '#78350F', fontSize: 16, fontWeight: '500' },
   familyMapButton: {
     backgroundColor: '#fff',
     borderRadius: 16,

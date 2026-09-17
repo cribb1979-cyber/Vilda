@@ -24,6 +24,9 @@ const PARENT_QUICK_MESSAGES = [
   '🎉 Bra jobbat, du är framme!',
   '❤️ Älskar dig',
   '📞 Ring mig när du kan',
+  '🚗 Kommer snart',
+  '📍 Vart är du?',
+  '📞 Ring mig, viktigt!',
 ];
 
 const CHILD_QUICK_MESSAGES = [
