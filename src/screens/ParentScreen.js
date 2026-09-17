@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { openInMaps } from '../lib/maps';
 import { fetchAppDisplayName } from '../lib/appSettings';
 import { startGeofencing } from '../lib/geofencing';
+import { getDistanceMeters, formatDistance } from '../lib/distance';
 import ChatScreen from './ChatScreen';
 import SettingsScreen from './SettingsScreen';
 import FamilyMapScreen from './FamilyMapScreen';
@@ -19,12 +20,19 @@ export default function ParentScreen() {
   const [displayName, setDisplayName] = useState('Vilda');
   const [childName, setChildName] = useState('');
   const [todayNote, setTodayNote] = useState(null);
+  const [places, setPlaces] = useState([]);
 
   useEffect(() => {
     loadLatest();
     loadTodayNote();
     fetchAppDisplayName().then(setDisplayName);
     if (profile?.location_sharing_enabled) refreshHomeGeofencing();
+
+    supabase
+      .from('saved_places')
+      .select('*')
+      .in('label', ['hem', 'skola'])
+      .then(({ data }) => setPlaces(data || []));
 
     const todayNoteChannel = supabase
       .channel('today-note-parent')
@@ -115,6 +123,32 @@ export default function ParentScreen() {
     ? Math.round((Date.now() - new Date(lastLocation.recorded_at)) / 60000)
     : null;
 
+  const locationStatus = (() => {
+    if (!lastLocation) return null;
+    for (const place of places) {
+      const distance = getDistanceMeters(
+        lastLocation.latitude,
+        lastLocation.longitude,
+        place.latitude,
+        place.longitude
+      );
+      if (distance <= (place.radius_meters || 100)) {
+        return place.label === 'hem' ? '🏠 Hemma' : '🏫 I skolan';
+      }
+    }
+    const home = places.find((p) => p.label === 'hem');
+    if (home) {
+      const distance = getDistanceMeters(
+        lastLocation.latitude,
+        lastLocation.longitude,
+        home.latitude,
+        home.longitude
+      );
+      return `📍 Ute, ${formatDistance(distance)} från hemmet`;
+    }
+    return '📍 Ute';
+  })();
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -139,6 +173,7 @@ export default function ParentScreen() {
             <Text style={styles.statusValue}>
               {minutesAgo === 0 ? 'Just nu' : `${minutesAgo} min sedan`}
             </Text>
+            {locationStatus && <Text style={styles.statusBadge}>{locationStatus}</Text>}
             <Text style={styles.batteryText}>
               🔋 {lastLocation.battery_level ?? '–'}%
               {lastLocation.is_charging ? ' (laddar)' : ''}
@@ -208,6 +243,7 @@ const styles = StyleSheet.create({
   statusCard: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 24 },
   statusLabel: { color: '#7C3AED', fontSize: 14 },
   statusValue: { fontSize: 22, fontWeight: '600', marginTop: 4 },
+  statusBadge: { fontSize: 15, fontWeight: '600', color: '#6D28D9', marginTop: 6 },
   batteryText: { marginTop: 8, fontSize: 16, color: '#444' },
   mapButton: {
     backgroundColor: '#EDE9FE',
