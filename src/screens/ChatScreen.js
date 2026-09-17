@@ -26,6 +26,13 @@ const PARENT_QUICK_MESSAGES = [
   '📞 Ring mig när du kan',
 ];
 
+const CHILD_QUICK_MESSAGES = [
+  '😊 Allt bra!',
+  '🏠 Är snart hemma',
+  '❤️ Puss och kram',
+  '🍽️ Vad blir det till mat?',
+];
+
 export default function ChatScreen({ visible, onClose }) {
   const { profile } = useAuth();
   const [messages, setMessages] = useState([]);
@@ -160,13 +167,13 @@ export default function ChatScreen({ visible, onClose }) {
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         />
 
-        {profile?.role === 'parent' && (
+        {profile?.role && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.quickRow}
           >
-            {PARENT_QUICK_MESSAGES.map((msg) => (
+            {(profile.role === 'parent' ? PARENT_QUICK_MESSAGES : CHILD_QUICK_MESSAGES).map((msg) => (
               <TouchableOpacity
                 key={msg}
                 style={styles.quickButton}
