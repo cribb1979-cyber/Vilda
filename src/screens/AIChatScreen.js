@@ -32,6 +32,12 @@ const MODES = [
     greeting: 'Hej! Skicka gärna en bild på uppgiften eller berätta vad du behöver hjälp med.',
   },
   { key: 'prata', icon: '💬', label: 'Jag vill prata', greeting: 'Hej! Vad har du på hjärtat?' },
+  {
+    key: 'video',
+    icon: '🎬',
+    label: 'Videotips',
+    greeting: 'Hej! Vill du ha tips på hur du klipper video, eller hjälp att komma på en idé att filma?',
+  },
 ];
 
 export default function AIChatScreen({ visible, onClose, onEmergency, appName }) {
