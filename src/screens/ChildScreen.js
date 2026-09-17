@@ -12,6 +12,7 @@ import { getDistanceMeters, formatDistance } from '../lib/distance';
 import SavedPlaceScreen from './SavedPlaceScreen';
 import ChatScreen from './ChatScreen';
 import FamilyMapScreen from './FamilyMapScreen';
+import LostScreen from './LostScreen';
 
 const FEELINGS = [
   { key: 'vilse', label: '🧭 Jag är vilse' },
@@ -32,6 +33,7 @@ export default function ChildScreen() {
   const [homeDirection, setHomeDirection] = useState(null); // { bearingLabel, distanceMeters }
   const [todayNote, setTodayNote] = useState(null);
   const [familyMapVisible, setFamilyMapVisible] = useState(false);
+  const [lostVisible, setLostVisible] = useState(false);
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -132,6 +134,12 @@ export default function ChildScreen() {
   }
 
   async function handleFeelingPress(feeling) {
+    if (feeling.key === 'vilse') {
+      setWorriedVisible(false);
+      setLostVisible(true);
+      return;
+    }
+
     const loc = await Location.getCurrentPositionAsync({});
     await supabase.from('alerts').insert({
       user_id: profile.id,
@@ -255,6 +263,7 @@ export default function ChildScreen() {
         name="Skolplatsen"
       />
       <ChatScreen visible={chatVisible} onClose={() => setChatVisible(false)} />
+      <LostScreen visible={lostVisible} onClose={() => setLostVisible(false)} />
 
       <TouchableOpacity style={styles.worriedButton} onPress={() => setWorriedVisible(true)}>
         <Text style={styles.worriedText}>💛 Jag känner mig orolig</Text>
