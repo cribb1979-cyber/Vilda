@@ -1,12 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { fetchAppDisplayName } from '../lib/appSettings';
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [displayName, setDisplayName] = useState('Vilda');
+
+  useEffect(() => {
+    fetchAppDisplayName().then(setDisplayName);
+  }, []);
 
   async function handleLogin() {
     setLoading(true);
@@ -17,7 +23,7 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Vilda 💜</Text>
+      <Text style={styles.title}>{displayName} 💜</Text>
       <Text style={styles.subtitle}>Trygghet, alltid nära</Text>
 
       <TextInput

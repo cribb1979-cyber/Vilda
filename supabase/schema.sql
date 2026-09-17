@@ -195,6 +195,31 @@ create policy "Familjemedlemmar kan uppdatera dagens notering"
   using (auth.uid() is not null);
 
 -- ============================================
+-- APP SETTINGS (rubriktext i appen, t.ex. barnets namn eller familjenamn.
+-- Läsbar av alla eftersom inloggningsskärmen visar den innan man loggat in.)
+-- ============================================
+create table app_settings (
+  id integer primary key default 1,
+  display_name text default 'Vilda',
+  updated_at timestamptz default now(),
+  constraint app_settings_singleton check (id = 1)
+);
+
+alter table app_settings enable row level security;
+
+create policy "Alla kan se appens namn"
+  on app_settings for select
+  using (true);
+
+create policy "Familjemedlemmar kan skriva appens namn"
+  on app_settings for insert
+  with check (auth.uid() is not null);
+
+create policy "Familjemedlemmar kan uppdatera appens namn"
+  on app_settings for update
+  using (auth.uid() is not null);
+
+-- ============================================
 -- REALTIME (så appen får push direkt vid nya rader)
 -- ============================================
 alter publication supabase_realtime add table locations;
@@ -202,3 +227,4 @@ alter publication supabase_realtime add table messages;
 alter publication supabase_realtime add table alerts;
 alter publication supabase_realtime add table trips;
 alter publication supabase_realtime add table today_note;
+alter publication supabase_realtime add table app_settings;

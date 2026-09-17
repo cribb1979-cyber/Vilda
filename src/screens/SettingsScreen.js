@@ -8,9 +8,11 @@ export default function SettingsScreen({ visible, onClose }) {
   const { profile } = useAuth();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [todayNote, setTodayNote] = useState('');
+  const [appDisplayName, setAppDisplayName] = useState('');
   const [locationSharing, setLocationSharing] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     if (visible) loadSettings();
@@ -27,6 +29,27 @@ export default function SettingsScreen({ visible, onClose }) {
 
     const { data } = await supabase.from('today_note').select('*').eq('id', 1).maybeSingle();
     setTodayNote(data?.content || '');
+
+    const { data: appSettings } = await supabase
+      .from('app_settings')
+      .select('display_name')
+      .eq('id', 1)
+      .maybeSingle();
+    setAppDisplayName(appSettings?.display_name || 'Vilda');
+  }
+
+  async function handleSaveAppName() {
+    if (!appDisplayName.trim()) return;
+    setSavingName(true);
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ id: 1, display_name: appDisplayName.trim(), updated_at: new Date().toISOString() });
+    setSavingName(false);
+    if (error) {
+      Alert.alert('Kunde inte spara', error.message);
+      return;
+    }
+    Alert.alert('Klart!', 'Namnet är sparat.');
   }
 
   async function handleToggleLocationSharing(value) {
@@ -86,7 +109,19 @@ export default function SettingsScreen({ visible, onClose }) {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.sectionLabel}>Mitt telefonnummer</Text>
+        <Text style={styles.sectionLabel}>Namn i appen</Text>
+        <Text style={styles.helper}>Visas högst upp, t.ex. barnets namn eller ett familjenamn.</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Vilda"
+          value={appDisplayName}
+          onChangeText={setAppDisplayName}
+        />
+        <TouchableOpacity style={styles.saveButton} onPress={handleSaveAppName} disabled={savingName}>
+          <Text style={styles.saveButtonText}>{savingName ? 'Sparar...' : 'Spara namn'}</Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.sectionLabel, { marginTop: 30 }]}>Mitt telefonnummer</Text>
         <Text style={styles.helper}>Används för "Ring pappa"-knappen i Vildas app.</Text>
         <TextInput
           style={styles.input}

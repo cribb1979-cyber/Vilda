@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { openInMaps } from '../lib/maps';
+import { fetchAppDisplayName } from '../lib/appSettings';
 import ChatScreen from './ChatScreen';
 import SettingsScreen from './SettingsScreen';
 import FamilyMapScreen from './FamilyMapScreen';
@@ -14,9 +15,27 @@ export default function ParentScreen() {
   const [chatVisible, setChatVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [familyMapVisible, setFamilyMapVisible] = useState(false);
+  const [displayName, setDisplayName] = useState('Vilda');
+  const [childName, setChildName] = useState('');
 
   useEffect(() => {
     loadLatest();
+    fetchAppDisplayName().then(setDisplayName);
+
+    supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('role', 'child')
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setChildName(data?.display_name || ''));
+
+    const settingsChannel = supabase
+      .channel('app-settings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+        setDisplayName(payload.new?.display_name || 'Vilda');
+      })
+      .subscribe();
 
     // Lyssna på nya positioner och larm i realtid
     const channel = supabase
@@ -29,7 +48,10 @@ export default function ParentScreen() {
       })
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      supabase.removeChannel(channel);
+      supabase.removeChannel(settingsChannel);
+    };
   }, []);
 
   async function loadLatest() {
@@ -74,7 +96,7 @@ export default function ParentScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Vilda 💜</Text>
+        <Text style={styles.title}>{displayName} 💜</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity onPress={() => setChatVisible(true)}>
             <Text style={styles.chatLink}>💬 Chatt</Text>
@@ -101,7 +123,7 @@ export default function ParentScreen() {
             </Text>
             <TouchableOpacity
               style={styles.mapButton}
-              onPress={() => openInMaps(lastLocation.latitude, lastLocation.longitude, 'Vilda')}
+              onPress={() => openInMaps(lastLocation.latitude, lastLocation.longitude, childName || 'Barnet')}
             >
               <Text style={styles.mapButtonText}>📍 Visa på karta</Text>
             </TouchableOpacity>
