@@ -19,8 +19,9 @@ export async function openWalkingDirections(latitude, longitude, label = 'Plats'
 }
 
 export async function callNumber(phoneNumber) {
+  const sanitized = phoneNumber.replace(/[^\d+]/g, '');
   try {
-    await Linking.openURL(`tel:${phoneNumber}`);
+    await Linking.openURL(`tel:${sanitized}`);
   } catch (e) {
     Alert.alert('Kunde inte ringa', 'Något gick fel.');
   }

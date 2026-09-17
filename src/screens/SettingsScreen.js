@@ -1,5 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Modal, Switch } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  Modal,
+  Switch,
+  ScrollView,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Keyboard,
+  Platform,
+} from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { startBackgroundLocationTracking, stopBackgroundLocationTracking } from '../lib/backgroundLocation';
@@ -104,7 +118,10 @@ export default function SettingsScreen({ visible, onClose }) {
 
   return (
     <Modal visible={visible} animationType="slide">
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.header}>
           <Text style={styles.title}>⚙️ Inställningar</Text>
           <TouchableOpacity onPress={onClose}>
@@ -112,6 +129,12 @@ export default function SettingsScreen({ visible, onClose }) {
           </TouchableOpacity>
         </View>
 
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 40 }}
+            keyboardShouldPersistTaps="handled"
+          >
         <Text style={styles.sectionLabel}>Namn i appen</Text>
         <Text style={styles.helper}>Visas högst upp, t.ex. barnets namn eller ett familjenamn.</Text>
         <TextInput
@@ -161,7 +184,9 @@ export default function SettingsScreen({ visible, onClose }) {
             trackColor={{ true: '#7C3AED' }}
           />
         </View>
-      </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

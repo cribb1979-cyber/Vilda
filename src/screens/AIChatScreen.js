@@ -156,6 +156,8 @@ export default function AIChatScreen({ visible, onClose, onEmergency, appName })
               renderItem={({ item }) => <Bubble item={item} />}
               contentContainerStyle={{ paddingVertical: 12 }}
               onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
             />
 
             {notActivated && (

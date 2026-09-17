@@ -168,6 +168,8 @@ export default function ChatScreen({ visible, onClose }) {
           renderItem={({ item }) => <MessageBubble item={item} isMine={item.sender_id === profile?.id} />}
           contentContainerStyle={{ paddingVertical: 12 }}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
         />
 
         {profile?.role && (
