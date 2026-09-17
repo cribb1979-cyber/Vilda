@@ -14,7 +14,8 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Vilda behöver din position även i bakgrunden under resan så att pappa kan se att du kommit fram tryggt.",
         "UIBackgroundModes": ["location", "remote-notification"],
         "NSCameraUsageDescription": "Vilda behöver kameran för att du ska kunna ta och skicka bilder i chatten.",
-        "NSPhotoLibraryUsageDescription": "Vilda behöver tillgång till dina bilder för att du ska kunna skicka bilder i chatten."
+        "NSPhotoLibraryUsageDescription": "Vilda behöver tillgång till dina bilder för att du ska kunna skicka bilder i chatten.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
