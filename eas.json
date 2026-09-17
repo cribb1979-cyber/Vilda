@@ -15,6 +15,15 @@
       "ios": {
         "simulator": false
       }
+    },
+    "production": {
+      "autoIncrement": true,
+      "ios": {
+        "simulator": false
+      }
     }
+  },
+  "submit": {
+    "production": {}
   }
 }
