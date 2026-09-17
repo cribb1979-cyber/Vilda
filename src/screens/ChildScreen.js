@@ -9,10 +9,12 @@ import { startGeofencing } from '../lib/geofencing';
 import { startBackgroundLocationTracking } from '../lib/backgroundLocation';
 import { callNumber, openWalkingDirections } from '../lib/maps';
 import { getDistanceMeters, formatDistance } from '../lib/distance';
+import { fetchAppDisplayName } from '../lib/appSettings';
 import SavedPlaceScreen from './SavedPlaceScreen';
 import ChatScreen from './ChatScreen';
 import FamilyMapScreen from './FamilyMapScreen';
 import LostScreen from './LostScreen';
+import AIChatScreen from './AIChatScreen';
 
 const FEELINGS = [
   { key: 'vilse', label: '🧭 Jag är vilse' },
@@ -34,12 +36,15 @@ export default function ChildScreen() {
   const [todayNote, setTodayNote] = useState(null);
   const [familyMapVisible, setFamilyMapVisible] = useState(false);
   const [lostVisible, setLostVisible] = useState(false);
+  const [aiChatVisible, setAiChatVisible] = useState(false);
+  const [appName, setAppName] = useState('Vilda');
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     startTracking();
     refreshGeofencing();
     loadTodayNote();
+    fetchAppDisplayName().then(setAppName);
 
     const channel = supabase
       .channel('today-note-child')
@@ -208,6 +213,19 @@ export default function ChildScreen() {
       </TouchableOpacity>
       <FamilyMapScreen visible={familyMapVisible} onClose={() => setFamilyMapVisible(false)} />
 
+      <TouchableOpacity style={styles.aiButton} onPress={() => setAiChatVisible(true)}>
+        <Text style={styles.aiButtonText}>🤖 {appName} AI</Text>
+      </TouchableOpacity>
+      <AIChatScreen
+        visible={aiChatVisible}
+        onClose={() => setAiChatVisible(false)}
+        onEmergency={() => {
+          setAiChatVisible(false);
+          setLostVisible(true);
+        }}
+        appName={appName}
+      />
+
       {todayNote && (
         <View style={styles.todayCard}>
           <Text style={styles.todayLabel}>📅 Idag</Text>
@@ -341,6 +359,13 @@ const styles = StyleSheet.create({
     borderColor: '#C4B5FD',
   },
   mapButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#6D28D9' },
+  aiButton: {
+    backgroundColor: '#EDE9FE',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  aiButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#6D28D9' },
   todayCard: {
     backgroundColor: '#FEF3C7',
     borderRadius: 16,
