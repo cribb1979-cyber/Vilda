@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { File } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { callNumber } from '../lib/maps';
 
 const PARENT_QUICK_MESSAGES = [
   '👀 Jag ser dig',
@@ -69,6 +70,22 @@ export default function ChatScreen({ visible, onClose }) {
       .order('created_at', { ascending: true })
       .limit(100);
     setMessages(data || []);
+  }
+
+  async function handleCallParent() {
+    const { data: parent } = await supabase
+      .from('profiles')
+      .select('phone_number')
+      .eq('role', 'parent')
+      .not('phone_number', 'is', null)
+      .limit(1)
+      .maybeSingle();
+
+    if (!parent?.phone_number) {
+      Alert.alert('Inget nummer sparat', 'Pappa har inte lagt in sitt telefonnummer än.');
+      return;
+    }
+    callNumber(parent.phone_number);
   }
 
   async function sendText() {
@@ -156,9 +173,16 @@ export default function ChatScreen({ visible, onClose }) {
       >
         <View style={styles.header}>
           <Text style={styles.title}>💬 Chatt</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.closeText}>Stäng</Text>
-          </TouchableOpacity>
+          <View style={styles.headerButtons}>
+            {profile?.role === 'child' && (
+              <TouchableOpacity onPress={handleCallParent}>
+                <Text style={styles.callText}>📞 Ring pappa</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={onClose}>
+              <Text style={styles.closeText}>Stäng</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <FlatList
@@ -247,6 +271,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   title: { fontSize: 22, fontWeight: '700', color: '#6D28D9' },
+  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  callText: { color: '#7C3AED', fontSize: 14, fontWeight: '600' },
   closeText: { color: '#7C3AED', fontSize: 14 },
   bubbleRow: { paddingHorizontal: 16, marginBottom: 8, flexDirection: 'row' },
   bubbleRowMine: { justifyContent: 'flex-end' },
