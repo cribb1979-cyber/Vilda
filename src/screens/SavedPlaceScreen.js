@@ -15,29 +15,48 @@ import { openInMaps } from '../lib/maps';
 
 const STOCKHOLM = { latitude: 59.3293, longitude: 18.0686 };
 
-export default function SavedPlaceScreen({ visible, onClose, onSaved, label, icon, title, name }) {
+export default function SavedPlaceScreen({
+  visible,
+  onClose,
+  onSaved,
+  label,
+  icon,
+  title,
+  name,
+  allowMultiple = false,
+}) {
   const [marker, setMarker] = useState(null);
+  const [existingId, setExistingId] = useState(null);
   const [address, setAddress] = useState('');
+  const [friendName, setFriendName] = useState('');
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (visible) loadInitial();
+    if (visible) {
+      setFriendName('');
+      setExistingId(null);
+      loadInitial();
+    }
   }, [visible]);
 
   async function loadInitial() {
     setLoadingInitial(true);
-    const { data: place } = await supabase
-      .from('saved_places')
-      .select('*')
-      .eq('label', label)
-      .maybeSingle();
 
-    if (place) {
-      setMarker({ latitude: place.latitude, longitude: place.longitude });
-      setLoadingInitial(false);
-      return;
+    if (!allowMultiple) {
+      const { data: place } = await supabase
+        .from('saved_places')
+        .select('*')
+        .eq('label', label)
+        .maybeSingle();
+
+      if (place) {
+        setMarker({ latitude: place.latitude, longitude: place.longitude });
+        setExistingId(place.id);
+        setLoadingInitial(false);
+        return;
+      }
     }
 
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -80,19 +99,25 @@ export default function SavedPlaceScreen({ visible, onClose, onSaved, label, ico
 
   async function handleSave() {
     if (!marker) return;
+    if (allowMultiple && !friendName.trim()) {
+      Alert.alert('Namn saknas', 'Skriv ett namn på vännen först.');
+      return;
+    }
+
     setSaving(true);
-    const { error } = await supabase
-      .from('saved_places')
-      .upsert(
-        { label, latitude: marker.latitude, longitude: marker.longitude },
-        { onConflict: 'label' }
-      );
+    const placeName = allowMultiple ? friendName.trim() : name;
+    const row = { label, name: placeName, latitude: marker.latitude, longitude: marker.longitude };
+
+    const { error } = existingId
+      ? await supabase.from('saved_places').update(row).eq('id', existingId)
+      : await supabase.from('saved_places').insert(row);
+
     setSaving(false);
     if (error) {
       Alert.alert('Kunde inte spara', error.message);
       return;
     }
-    Alert.alert('Klart!', `${name} är sparad.`);
+    Alert.alert('Klart!', `${placeName} är sparad.`);
     onSaved?.();
     onClose();
   }
@@ -110,6 +135,15 @@ export default function SavedPlaceScreen({ visible, onClose, onSaved, label, ico
         </View>
 
         <Text style={styles.helper}>Sök adress nedan, eller använd din nuvarande position.</Text>
+
+        {allowMultiple && (
+          <TextInput
+            style={[styles.searchInput, { marginRight: 0, marginBottom: 12 }]}
+            placeholder="Namn på vännen, t.ex. Emma"
+            value={friendName}
+            onChangeText={setFriendName}
+          />
+        )}
 
         <View style={styles.searchRow}>
           <TextInput

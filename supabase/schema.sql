@@ -133,17 +133,21 @@ create policy "Familjemedlemmar kan radera larm"
   using (auth.uid() is not null);
 
 -- ============================================
--- SAVED PLACES (hem, skola - för hitta-hem-pilen och geofencing)
+-- SAVED PLACES (hem, skola, vän - för hitta-hem-pilen, geofencing och familjekartan)
 -- ============================================
 create table saved_places (
   id uuid default gen_random_uuid() primary key,
-  label text not null unique, -- 'hem', 'skola'
+  label text not null, -- 'hem', 'skola', 'vän'
+  name text not null, -- visningsnamn, t.ex. "Hem", "Skola", "Kompis Emma"
   latitude double precision not null,
   longitude double precision not null,
   radius_meters integer default 100,
   created_by uuid references profiles(id),
   created_at timestamptz default now()
 );
+
+-- Bara en hem-plats och en skol-plats åt gången, men flera vänner tillåtna
+create unique index saved_places_unique_hem_skola on saved_places (label) where label in ('hem', 'skola');
 
 alter table saved_places enable row level security;
 

@@ -31,6 +31,7 @@ export default function ChildScreen() {
   const [worriedVisible, setWorriedVisible] = useState(false);
   const [setHomeVisible, setSetHomeVisible] = useState(false);
   const [setSchoolVisible, setSetSchoolVisible] = useState(false);
+  const [addFriendVisible, setAddFriendVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
   const [homeDirection, setHomeDirection] = useState(null); // { bearingLabel, distanceMeters }
   const [todayNote, setTodayNote] = useState(null);
@@ -253,6 +254,10 @@ export default function ChildScreen() {
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity style={styles.addFriendButton} onPress={() => setAddFriendVisible(true)}>
+        <Text style={styles.setHomeText}>👫 Lägg till vän</Text>
+      </TouchableOpacity>
+
       <View style={styles.placeButtonRow}>
         <TouchableOpacity style={styles.directionsButton} onPress={() => handleDirections('hem', 'hem')}>
           <Text style={styles.directionsText}>🗺️ Vägbeskrivning hem</Text>
@@ -279,6 +284,16 @@ export default function ChildScreen() {
         icon="🏫"
         title="Ställ in skola"
         name="Skolplatsen"
+      />
+      <SavedPlaceScreen
+        visible={addFriendVisible}
+        onClose={() => setAddFriendVisible(false)}
+        onSaved={() => {}}
+        label="vän"
+        icon="👫"
+        title="Lägg till vän"
+        name="Vännen"
+        allowMultiple
       />
       <ChatScreen visible={chatVisible} onClose={() => setChatVisible(false)} />
       <LostScreen visible={lostVisible} onClose={() => setLostVisible(false)} />
@@ -400,6 +415,12 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   setHomeText: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#6D28D9' },
+  addFriendButton: {
+    backgroundColor: '#EDE9FE',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+  },
   directionsButton: {
     flex: 1,
     backgroundColor: '#fff',

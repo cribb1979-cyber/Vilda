@@ -7,8 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { openWalkingDirections } from '../lib/maps';
 import { getDistanceMeters, formatDistance, estimateWalkingMinutes } from '../lib/distance';
 
-const PLACE_ICONS = { hem: '🏠', skola: '🏫' };
-const PLACE_NAMES = { hem: 'Hem', skola: 'Skola' };
+const PLACE_ICONS = { hem: '🏠', skola: '🏫', vän: '👫' };
 
 export default function FamilyMapScreen({ visible, onClose }) {
   const { profile } = useAuth();
@@ -78,7 +77,7 @@ export default function FamilyMapScreen({ visible, onClose }) {
   }, [profile?.id]);
 
   async function loadPlaces() {
-    const { data } = await supabase.from('saved_places').select('*').in('label', ['hem', 'skola']);
+    const { data } = await supabase.from('saved_places').select('*');
     setPlaces(data || []);
   }
 
@@ -136,7 +135,7 @@ export default function FamilyMapScreen({ visible, onClose }) {
             ))}
             {places.map((place) => (
               <Marker
-                key={place.label}
+                key={place.id}
                 coordinate={{ latitude: place.latitude, longitude: place.longitude }}
                 onPress={() => setSelected({ type: 'place', ...place })}
               >
@@ -163,7 +162,7 @@ export default function FamilyMapScreen({ visible, onClose }) {
 
 function DetailCard({ selected, distanceMeters, onClose }) {
   const isPerson = selected.type === 'person';
-  const name = isPerson ? selected.display_name : PLACE_NAMES[selected.label] || selected.label;
+  const name = isPerson ? selected.display_name : selected.name || selected.label;
   const lat = isPerson ? selected.location.latitude : selected.latitude;
   const lon = isPerson ? selected.location.longitude : selected.longitude;
 

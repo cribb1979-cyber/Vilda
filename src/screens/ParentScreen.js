@@ -9,6 +9,7 @@ import { getDistanceMeters, formatDistance } from '../lib/distance';
 import ChatScreen from './ChatScreen';
 import SettingsScreen from './SettingsScreen';
 import FamilyMapScreen from './FamilyMapScreen';
+import SavedPlaceScreen from './SavedPlaceScreen';
 
 export default function ParentScreen() {
   const { signOut, profile } = useAuth();
@@ -17,6 +18,7 @@ export default function ParentScreen() {
   const [chatVisible, setChatVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [familyMapVisible, setFamilyMapVisible] = useState(false);
+  const [addFriendVisible, setAddFriendVisible] = useState(false);
   const [displayName, setDisplayName] = useState('Vilda');
   const [childName, setChildName] = useState('');
   const [todayNote, setTodayNote] = useState(null);
@@ -201,6 +203,10 @@ export default function ParentScreen() {
         <Text style={styles.familyMapButtonText}>🗺️ Familjekarta</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity style={styles.addFriendButton} onPress={() => setAddFriendVisible(true)}>
+        <Text style={styles.addFriendButtonText}>👫 Lägg till vän</Text>
+      </TouchableOpacity>
+
       <Text style={styles.sectionTitle}>Larm & känslor</Text>
       <FlatList
         data={alerts}
@@ -212,6 +218,16 @@ export default function ParentScreen() {
       <ChatScreen visible={chatVisible} onClose={() => setChatVisible(false)} />
       <SettingsScreen visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
       <FamilyMapScreen visible={familyMapVisible} onClose={() => setFamilyMapVisible(false)} />
+      <SavedPlaceScreen
+        visible={addFriendVisible}
+        onClose={() => setAddFriendVisible(false)}
+        onSaved={() => {}}
+        label="vän"
+        icon="👫"
+        title="Lägg till vän"
+        name="Vännen"
+        allowMultiple
+      />
     </View>
   );
 }
@@ -269,6 +285,13 @@ const styles = StyleSheet.create({
     borderColor: '#C4B5FD',
   },
   familyMapButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#6D28D9' },
+  addFriendButton: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+  },
+  addFriendButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#6D28D9' },
   sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 10, color: '#4C1D95' },
   eventRow: {
     flexDirection: 'row',
