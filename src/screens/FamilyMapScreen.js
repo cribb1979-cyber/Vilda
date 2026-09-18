@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { openWalkingDirections } from '../lib/maps';
 import { getDistanceMeters, formatDistance, estimateWalkingMinutes } from '../lib/distance';
 
-const PLACE_ICONS = { hem: '🏠', skola: '🏫' };
+const PLACE_ICONS = { hem: '🏠', skola: '🏫', byte: '🚏' };
 
 export default function FamilyMapScreen({ visible, onClose }) {
   const { profile } = useAuth();

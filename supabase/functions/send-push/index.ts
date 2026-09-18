@@ -25,9 +25,16 @@ Deno.serve(async (req) => {
 
   if (table === 'alerts') {
     senderId = record.user_id;
-    const isSos = record.alert_type === 'sos';
-    title = isSos ? '🚨 LARM' : '💛 Känner sig orolig';
-    body = isSos ? 'Öppna appen för att se var hon är.' : record.feeling || 'Öppna appen för att se mer.';
+    if (record.alert_type === 'sos') {
+      title = '🚨 LARM';
+      body = 'Öppna appen för att se var hon är.';
+    } else if (record.alert_type === 'byte_stuck') {
+      title = '🚏 Kvar vid bytet';
+      body = record.feeling || 'Öppna appen för att se var hon är.';
+    } else {
+      title = '💛 Känner sig orolig';
+      body = record.feeling || 'Öppna appen för att se mer.';
+    }
   } else if (table === 'messages') {
     senderId = record.sender_id;
     if (record.message_type === 'arrived') {

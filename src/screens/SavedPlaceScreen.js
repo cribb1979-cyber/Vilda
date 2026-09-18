@@ -30,10 +30,12 @@ export default function SavedPlaceScreen({
   const [existingId, setExistingId] = useState(null);
   const [address, setAddress] = useState('');
   const [friendName, setFriendName] = useState('');
+  const [dwellMinutes, setDwellMinutes] = useState('15');
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const mapRef = useRef(null);
+  const isTransferStop = label === 'byte';
 
   useEffect(() => {
     if (visible) {
@@ -41,12 +43,14 @@ export default function SavedPlaceScreen({
         setMarker({ latitude: editingPlace.latitude, longitude: editingPlace.longitude });
         setExistingId(editingPlace.id);
         setFriendName(editingPlace.name || '');
+        setDwellMinutes(String(editingPlace.dwell_minutes || 15));
         setAddress('');
         setLoadingInitial(false);
         return;
       }
       setFriendName('');
       setExistingId(null);
+      setDwellMinutes('15');
       setAddress('');
       loadInitial();
     }
@@ -125,6 +129,9 @@ export default function SavedPlaceScreen({
     setSaving(true);
     const placeName = allowMultiple ? friendName.trim() : name;
     const row = { label, name: placeName, latitude: marker.latitude, longitude: marker.longitude };
+    if (isTransferStop) {
+      row.dwell_minutes = parseInt(dwellMinutes, 10) || 15;
+    }
 
     const { error } = existingId
       ? await supabase.from('saved_places').update(row).eq('id', existingId)
@@ -161,6 +168,19 @@ export default function SavedPlaceScreen({
             value={friendName}
             onChangeText={setFriendName}
           />
+        )}
+
+        {isTransferStop && (
+          <View style={styles.dwellRow}>
+            <Text style={styles.dwellLabel}>Larma om kvar längre än</Text>
+            <TextInput
+              style={styles.dwellInput}
+              value={dwellMinutes}
+              onChangeText={setDwellMinutes}
+              keyboardType="number-pad"
+            />
+            <Text style={styles.dwellLabel}>minuter</Text>
+          </View>
         )}
 
         <View style={styles.searchRow}>
@@ -246,6 +266,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   searchButtonText: { color: '#fff', fontWeight: '600' },
+  dwellRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 8 },
+  dwellLabel: { color: '#4C1D95', fontSize: 14 },
+  dwellInput: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    width: 60,
+    textAlign: 'center',
+  },
   mapLoading: { flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
   mapWrap: { flex: 1, marginBottom: 14, borderRadius: 16, overflow: 'hidden' },
   map: { flex: 1 },

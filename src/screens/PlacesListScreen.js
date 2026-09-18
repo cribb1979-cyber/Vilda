@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList, Alert } from
 import { supabase } from '../lib/supabase';
 import SavedPlaceScreen from './SavedPlaceScreen';
 
-const LABEL_ICONS = { hem: '🏠', skola: '🏫' };
-const LABEL_TITLES = { hem: 'Ställ in hem', skola: 'Ställ in skola' };
+const LABEL_ICONS = { hem: '🏠', skola: '🏫', byte: '🚏' };
+const LABEL_TITLES = { hem: 'Ställ in hem', skola: 'Ställ in skola', byte: 'Redigera bytesplats' };
 
 export default function PlacesListScreen({ visible, onClose }) {
   const [places, setPlaces] = useState([]);

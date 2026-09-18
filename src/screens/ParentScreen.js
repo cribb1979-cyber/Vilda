@@ -21,6 +21,7 @@ export default function ParentScreen() {
   const [familyMapVisible, setFamilyMapVisible] = useState(false);
   const [addFriendVisible, setAddFriendVisible] = useState(false);
   const [placesListVisible, setPlacesListVisible] = useState(false);
+  const [addTransferVisible, setAddTransferVisible] = useState(false);
   const [displayName, setDisplayName] = useState('Vilda');
   const [childName, setChildName] = useState('');
   const [todayNote, setTodayNote] = useState(null);
@@ -214,6 +215,10 @@ export default function ParentScreen() {
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity style={styles.addTransferButton} onPress={() => setAddTransferVisible(true)}>
+        <Text style={styles.addFriendButtonText}>🚏 Lägg till bytesplats</Text>
+      </TouchableOpacity>
+
       <Text style={styles.sectionTitle}>Larm & känslor</Text>
       <FlatList
         data={alerts}
@@ -235,6 +240,16 @@ export default function ParentScreen() {
         name="Platsen"
         allowMultiple
       />
+      <SavedPlaceScreen
+        visible={addTransferVisible}
+        onClose={() => setAddTransferVisible(false)}
+        onSaved={() => {}}
+        label="byte"
+        icon="🚏"
+        title="Lägg till bytesplats"
+        name="Bytesplatsen"
+        allowMultiple
+      />
       <PlacesListScreen visible={placesListVisible} onClose={() => setPlacesListVisible(false)} />
     </View>
   );
@@ -242,13 +257,17 @@ export default function ParentScreen() {
 
 function AlertRow({ item, onDelete }) {
   const isSos = item.alert_type === 'sos';
+  const isByteStuck = item.alert_type === 'byte_stuck';
+  const icon = isSos ? '🚨' : isByteStuck ? '🚏' : '💛';
+  const title = isSos ? 'LARM' : isByteStuck ? 'Kvar vid bytet' : 'Känner sig orolig';
+
   return (
     <View style={[styles.eventRow, isSos ? styles.sosRow : styles.worriedRow]}>
-      <Text style={styles.eventIcon}>{isSos ? '🚨' : '💛'}</Text>
+      <Text style={styles.eventIcon}>{icon}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={styles.eventTitle}>{isSos ? 'LARM' : 'Känner sig orolig'}</Text>
+        <Text style={styles.eventTitle}>{title}</Text>
         {item.feeling ? <Text style={styles.eventBody}>{item.feeling}</Text> : null}
-        {item.note ? <Text style={styles.eventBody}>{item.note}</Text> : null}
+        {item.note && !isByteStuck ? <Text style={styles.eventBody}>{item.note}</Text> : null}
       </View>
       <TouchableOpacity onPress={onDelete} style={styles.deleteButton}>
         <Text style={styles.deleteButtonText}>🗑</Text>
@@ -299,6 +318,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
+  },
+  addTransferButton: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
   },
   addFriendButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#6D28D9' },
   sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 10, color: '#4C1D95' },

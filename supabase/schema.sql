@@ -104,7 +104,7 @@ create policy "Användare kan markera meddelanden som lästa"
 create table alerts (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references profiles(id) not null,
-  alert_type text not null check (alert_type in ('sos', 'worried')),
+  alert_type text not null check (alert_type in ('sos', 'worried', 'byte_stuck')),
   feeling text, -- t.ex. 'vilse', 'laskigt', 'missade_hallplats', 'ensam', 'annat'
   note text,
   latitude double precision,
@@ -137,11 +137,12 @@ create policy "Familjemedlemmar kan radera larm"
 -- ============================================
 create table saved_places (
   id uuid default gen_random_uuid() primary key,
-  label text not null, -- 'hem', 'skola', 'vän'
+  label text not null, -- 'hem', 'skola', 'plats', 'byte'
   name text not null, -- visningsnamn, t.ex. "Hem", "Skola", "Kompis Emma"
   latitude double precision not null,
   longitude double precision not null,
   radius_meters integer default 100,
+  dwell_minutes integer, -- endast för label='byte': larma om barnet är kvar längre än så här
   created_by uuid references profiles(id),
   created_at timestamptz default now()
 );

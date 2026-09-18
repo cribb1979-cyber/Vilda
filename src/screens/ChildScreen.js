@@ -33,6 +33,7 @@ export default function ChildScreen() {
   const [setHomeVisible, setSetHomeVisible] = useState(false);
   const [setSchoolVisible, setSetSchoolVisible] = useState(false);
   const [addFriendVisible, setAddFriendVisible] = useState(false);
+  const [addTransferVisible, setAddTransferVisible] = useState(false);
   const [placesListVisible, setPlacesListVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
   const [homeDirection, setHomeDirection] = useState(null); // { bearingLabel, distanceMeters }
@@ -279,6 +280,10 @@ export default function ChildScreen() {
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity style={styles.addTransferButton} onPress={() => setAddTransferVisible(true)}>
+        <Text style={styles.setHomeText}>🚏 Lägg till bytesplats</Text>
+      </TouchableOpacity>
+
       <View style={styles.placeButtonRow}>
         <TouchableOpacity style={styles.directionsButton} onPress={() => handleDirections('hem', 'hem')}>
           <Text style={styles.directionsText}>🗺️ Vägbeskrivning hem</Text>
@@ -314,6 +319,16 @@ export default function ChildScreen() {
         icon="📍"
         title="Lägg till plats"
         name="Platsen"
+        allowMultiple
+      />
+      <SavedPlaceScreen
+        visible={addTransferVisible}
+        onClose={() => setAddTransferVisible(false)}
+        onSaved={() => {}}
+        label="byte"
+        icon="🚏"
+        title="Lägg till bytesplats"
+        name="Bytesplatsen"
         allowMultiple
       />
       <PlacesListScreen visible={placesListVisible} onClose={() => setPlacesListVisible(false)} />
@@ -442,6 +457,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#EDE9FE',
     borderRadius: 16,
     padding: 14,
+  },
+  addTransferButton: {
+    backgroundColor: '#EDE9FE',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
   },
   directionsButton: {
     flex: 1,
