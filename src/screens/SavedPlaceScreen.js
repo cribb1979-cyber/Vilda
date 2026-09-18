@@ -100,7 +100,7 @@ export default function SavedPlaceScreen({
   async function handleSave() {
     if (!marker) return;
     if (allowMultiple && !friendName.trim()) {
-      Alert.alert('Namn saknas', 'Skriv ett namn på vännen först.');
+      Alert.alert('Namn saknas', 'Skriv ett namn på platsen först.');
       return;
     }
 
@@ -139,7 +139,7 @@ export default function SavedPlaceScreen({
         {allowMultiple && (
           <TextInput
             style={[styles.searchInput, { marginRight: 0, marginBottom: 12 }]}
-            placeholder="Namn på vännen, t.ex. Emma"
+            placeholder="Namn på platsen, t.ex. Hållplats B eller Kompis Emma"
             value={friendName}
             onChangeText={setFriendName}
           />

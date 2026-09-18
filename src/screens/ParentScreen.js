@@ -204,7 +204,7 @@ export default function ParentScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.addFriendButton} onPress={() => setAddFriendVisible(true)}>
-        <Text style={styles.addFriendButtonText}>👫 Lägg till vän</Text>
+        <Text style={styles.addFriendButtonText}>📍 Lägg till plats</Text>
       </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Larm & känslor</Text>
@@ -222,10 +222,10 @@ export default function ParentScreen() {
         visible={addFriendVisible}
         onClose={() => setAddFriendVisible(false)}
         onSaved={() => {}}
-        label="vän"
-        icon="👫"
-        title="Lägg till vän"
-        name="Vännen"
+        label="plats"
+        icon="📍"
+        title="Lägg till plats"
+        name="Platsen"
         allowMultiple
       />
     </View>

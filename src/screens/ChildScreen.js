@@ -255,7 +255,7 @@ export default function ChildScreen() {
       </View>
 
       <TouchableOpacity style={styles.addFriendButton} onPress={() => setAddFriendVisible(true)}>
-        <Text style={styles.setHomeText}>👫 Lägg till vän</Text>
+        <Text style={styles.setHomeText}>📍 Lägg till plats</Text>
       </TouchableOpacity>
 
       <View style={styles.placeButtonRow}>
@@ -289,10 +289,10 @@ export default function ChildScreen() {
         visible={addFriendVisible}
         onClose={() => setAddFriendVisible(false)}
         onSaved={() => {}}
-        label="vän"
-        icon="👫"
-        title="Lägg till vän"
-        name="Vännen"
+        label="plats"
+        icon="📍"
+        title="Lägg till plats"
+        name="Platsen"
         allowMultiple
       />
       <ChatScreen visible={chatVisible} onClose={() => setChatVisible(false)} />
