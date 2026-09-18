@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -40,6 +40,12 @@ const MODES = [
   },
 ];
 
+function newGateProblem() {
+  const a = Math.floor(Math.random() * 70) + 20;
+  const b = Math.floor(Math.random() * 70) + 20;
+  return { a, b, answer: a + b };
+}
+
 export default function AIChatScreen({ visible, onClose, onEmergency, appName }) {
   const [mode, setMode] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -47,7 +53,18 @@ export default function AIChatScreen({ visible, onClose, onEmergency, appName })
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [notActivated, setNotActivated] = useState(false);
+  const [gatePassed, setGatePassed] = useState(false);
+  const [gateProblem, setGateProblem] = useState(newGateProblem);
+  const [gateInput, setGateInput] = useState('');
   const listRef = useRef(null);
+
+  useEffect(() => {
+    if (visible) {
+      setGatePassed(false);
+      setGateProblem(newGateProblem());
+      setGateInput('');
+    }
+  }, [visible]);
 
   function reset() {
     setMode(null);
@@ -59,6 +76,16 @@ export default function AIChatScreen({ visible, onClose, onEmergency, appName })
   function handleClose() {
     reset();
     onClose();
+  }
+
+  function handleGateSubmit() {
+    if (parseInt(gateInput, 10) === gateProblem.answer) {
+      setGatePassed(true);
+      return;
+    }
+    Alert.alert('Fel svar', 'Fråga en vuxen om du behöver hjälp att räkna ut det.');
+    setGateProblem(newGateProblem());
+    setGateInput('');
   }
 
   function selectMode(m) {
@@ -130,7 +157,29 @@ export default function AIChatScreen({ visible, onClose, onEmergency, appName })
           </TouchableOpacity>
         </View>
 
-        {!mode ? (
+        {!gatePassed ? (
+          <View style={styles.modeList}>
+            <View style={styles.gateCard}>
+              <Text style={styles.gateTitle}>👋 Fråga en vuxen</Text>
+              <Text style={styles.gateHelper}>
+                Räkna ut talet nedan tillsammans med en vuxen för att öppna AI-chatten.
+              </Text>
+              <Text style={styles.gateProblem}>
+                {gateProblem.a} + {gateProblem.b} = ?
+              </Text>
+              <TextInput
+                style={styles.gateInput}
+                placeholder="Svar"
+                value={gateInput}
+                onChangeText={setGateInput}
+                keyboardType="number-pad"
+              />
+              <TouchableOpacity style={styles.gateButton} onPress={handleGateSubmit} disabled={!gateInput}>
+                <Text style={styles.gateButtonText}>Kontrollera</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : !mode ? (
           <View style={styles.modeList}>
             <Text style={styles.modeHelper}>Vad vill du göra?</Text>
             {MODES.map((m) => (
@@ -224,6 +273,23 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700', color: '#6D28D9' },
   closeText: { color: '#7C3AED', fontSize: 14 },
   modeList: { padding: 20 },
+  gateCard: { backgroundColor: '#fff', borderRadius: 20, padding: 24, alignItems: 'center' },
+  gateTitle: { fontSize: 20, fontWeight: '700', color: '#6D28D9', marginBottom: 8 },
+  gateHelper: { color: '#7C3AED', fontSize: 14, textAlign: 'center', marginBottom: 18 },
+  gateProblem: { fontSize: 28, fontWeight: '800', color: '#4C1D95', marginBottom: 18 },
+  gateInput: {
+    width: '100%',
+    backgroundColor: '#F5F3FF',
+    borderRadius: 14,
+    padding: 14,
+    fontSize: 18,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    marginBottom: 14,
+  },
+  gateButton: { backgroundColor: '#7C3AED', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32 },
+  gateButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   modeHelper: { color: '#7C3AED', fontSize: 15, marginBottom: 16 },
   modeButton: { backgroundColor: '#fff', borderRadius: 16, padding: 18, marginBottom: 12 },
   modeButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#6D28D9' },

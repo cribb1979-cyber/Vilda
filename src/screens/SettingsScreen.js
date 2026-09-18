@@ -25,6 +25,7 @@ export default function SettingsScreen({ visible, onClose }) {
   const [todayNote, setTodayNote] = useState('');
   const [appDisplayName, setAppDisplayName] = useState('');
   const [locationSharing, setLocationSharing] = useState(false);
+  const [aiChatEnabled, setAiChatEnabled] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const [savingName, setSavingName] = useState(false);
@@ -47,10 +48,22 @@ export default function SettingsScreen({ visible, onClose }) {
 
     const { data: appSettings } = await supabase
       .from('app_settings')
-      .select('display_name')
+      .select('display_name, ai_chat_enabled')
       .eq('id', 1)
       .maybeSingle();
     setAppDisplayName(appSettings?.display_name || 'Vilda');
+    setAiChatEnabled(appSettings?.ai_chat_enabled || false);
+  }
+
+  async function handleToggleAiChat(value) {
+    setAiChatEnabled(value);
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ id: 1, ai_chat_enabled: value, updated_at: new Date().toISOString() });
+    if (error) {
+      setAiChatEnabled(!value);
+      Alert.alert('Kunde inte ändra', error.message);
+    }
   }
 
   async function handleSaveAppName() {
@@ -181,6 +194,18 @@ export default function SettingsScreen({ visible, onClose }) {
           <Switch
             value={locationSharing}
             onValueChange={handleToggleLocationSharing}
+            trackColor={{ true: '#7C3AED' }}
+          />
+        </View>
+
+        <View style={styles.shareRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.sectionLabel}>🤖 Tillåt AI-chatt</Text>
+            <Text style={styles.helper}>Släpper in "Vilda AI"-knappen i appen. Av som standard.</Text>
+          </View>
+          <Switch
+            value={aiChatEnabled}
+            onValueChange={handleToggleAiChat}
             trackColor={{ true: '#7C3AED' }}
           />
         </View>

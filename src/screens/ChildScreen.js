@@ -9,7 +9,7 @@ import { startGeofencing } from '../lib/geofencing';
 import { startBackgroundLocationTracking } from '../lib/backgroundLocation';
 import { callNumber, openWalkingDirections } from '../lib/maps';
 import { getDistanceMeters, formatDistance } from '../lib/distance';
-import { fetchAppDisplayName } from '../lib/appSettings';
+import { fetchAppDisplayName, fetchAiChatEnabled } from '../lib/appSettings';
 import SavedPlaceScreen from './SavedPlaceScreen';
 import ChatScreen from './ChatScreen';
 import FamilyMapScreen from './FamilyMapScreen';
@@ -38,6 +38,7 @@ export default function ChildScreen() {
   const [familyMapVisible, setFamilyMapVisible] = useState(false);
   const [lostVisible, setLostVisible] = useState(false);
   const [aiChatVisible, setAiChatVisible] = useState(false);
+  const [aiChatEnabled, setAiChatEnabled] = useState(false);
   const [appName, setAppName] = useState('Vilda');
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -46,6 +47,7 @@ export default function ChildScreen() {
     refreshGeofencing();
     loadTodayNote();
     fetchAppDisplayName().then(setAppName);
+    fetchAiChatEnabled().then(setAiChatEnabled);
 
     const channel = supabase
       .channel('today-note-child')
@@ -54,7 +56,17 @@ export default function ChildScreen() {
       })
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    const appSettingsChannel = supabase
+      .channel('app-settings-child')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+        setAiChatEnabled(payload.new?.ai_chat_enabled || false);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      supabase.removeChannel(appSettingsChannel);
+    };
   }, []);
 
   async function loadTodayNote() {
@@ -214,9 +226,11 @@ export default function ChildScreen() {
       </TouchableOpacity>
       <FamilyMapScreen visible={familyMapVisible} onClose={() => setFamilyMapVisible(false)} />
 
-      <TouchableOpacity style={styles.aiButton} onPress={() => setAiChatVisible(true)}>
-        <Text style={styles.aiButtonText}>🤖 {appName} AI</Text>
-      </TouchableOpacity>
+      {aiChatEnabled && (
+        <TouchableOpacity style={styles.aiButton} onPress={() => setAiChatVisible(true)}>
+          <Text style={styles.aiButtonText}>🤖 {appName} AI</Text>
+        </TouchableOpacity>
+      )}
       <AIChatScreen
         visible={aiChatVisible}
         onClose={() => setAiChatVisible(false)}

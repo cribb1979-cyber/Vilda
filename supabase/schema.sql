@@ -205,6 +205,7 @@ create policy "Familjemedlemmar kan uppdatera dagens notering"
 create table app_settings (
   id integer primary key default 1,
   display_name text default 'Vilda',
+  ai_chat_enabled boolean not null default false,
   updated_at timestamptz default now(),
   constraint app_settings_singleton check (id = 1)
 );
