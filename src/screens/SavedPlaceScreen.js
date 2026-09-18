@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,9 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
-import { openInMaps } from '../lib/maps';
 
 const STOCKHOLM = { latitude: 59.3293, longitude: 18.0686 };
 
@@ -24,6 +24,7 @@ export default function SavedPlaceScreen({
   title,
   name,
   allowMultiple = false,
+  editingPlace = null,
 }) {
   const [marker, setMarker] = useState(null);
   const [existingId, setExistingId] = useState(null);
@@ -32,14 +33,24 @@ export default function SavedPlaceScreen({
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
+  const mapRef = useRef(null);
 
   useEffect(() => {
     if (visible) {
+      if (editingPlace) {
+        setMarker({ latitude: editingPlace.latitude, longitude: editingPlace.longitude });
+        setExistingId(editingPlace.id);
+        setFriendName(editingPlace.name || '');
+        setAddress('');
+        setLoadingInitial(false);
+        return;
+      }
       setFriendName('');
       setExistingId(null);
+      setAddress('');
       loadInitial();
     }
-  }, [visible]);
+  }, [visible, editingPlace]);
 
   async function loadInitial() {
     setLoadingInitial(true);
@@ -69,17 +80,24 @@ export default function SavedPlaceScreen({
     setLoadingInitial(false);
   }
 
+  function moveTo(latitude, longitude) {
+    setMarker({ latitude, longitude });
+    mapRef.current?.animateToRegion(
+      { latitude, longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 },
+      400
+    );
+  }
+
   async function handleSearch() {
     if (!address.trim()) return;
     setSearching(true);
     try {
       const results = await Location.geocodeAsync(address.trim());
       if (!results.length) {
-        Alert.alert('Hittade ingen plats', 'Prova en mer specifik adress.');
+        Alert.alert('Hittade ingen plats', 'Prova en mer specifik adress, eller dra nålen till rätt ställe på kartan.');
         return;
       }
-      const { latitude, longitude } = results[0];
-      setMarker({ latitude, longitude });
+      moveTo(results[0].latitude, results[0].longitude);
     } catch (e) {
       Alert.alert('Kunde inte söka', 'Något gick fel, försök igen.');
     } finally {
@@ -94,7 +112,7 @@ export default function SavedPlaceScreen({
       return;
     }
     const loc = await Location.getCurrentPositionAsync({});
-    setMarker({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+    moveTo(loc.coords.latitude, loc.coords.longitude);
   }
 
   async function handleSave() {
@@ -134,7 +152,7 @@ export default function SavedPlaceScreen({
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.helper}>Sök adress nedan, eller använd din nuvarande position.</Text>
+        <Text style={styles.helper}>Sök adress, använd nuvarande position, eller dra nålen till exakt rätt ställe.</Text>
 
         {allowMultiple && (
           <TextInput
@@ -165,17 +183,25 @@ export default function SavedPlaceScreen({
           </View>
         ) : (
           marker && (
-            <View style={styles.previewCard}>
-              <Text style={styles.previewLabel}>Vald plats</Text>
-              <Text style={styles.previewCoords}>
-                {marker.latitude.toFixed(5)}, {marker.longitude.toFixed(5)}
-              </Text>
-              <TouchableOpacity
-                style={styles.previewButton}
-                onPress={() => openInMaps(marker.latitude, marker.longitude, name)}
+            <View style={styles.mapWrap}>
+              <MapView
+                ref={mapRef}
+                style={styles.map}
+                initialRegion={{
+                  latitude: marker.latitude,
+                  longitude: marker.longitude,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+                onPress={(e) => setMarker(e.nativeEvent.coordinate)}
               >
-                <Text style={styles.previewButtonText}>🔍 Förhandsgranska på karta</Text>
-              </TouchableOpacity>
+                <Marker
+                  coordinate={marker}
+                  draggable
+                  onDragEnd={(e) => setMarker(e.nativeEvent.coordinate)}
+                />
+              </MapView>
+              <Text style={styles.mapHint}>👆 Tryck eller dra nålen för att pricka in exakt rätt ställe</Text>
             </View>
           )
         )}
@@ -221,19 +247,20 @@ const styles = StyleSheet.create({
   },
   searchButtonText: { color: '#fff', fontWeight: '600' },
   mapLoading: { flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
-  previewCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
+  mapWrap: { flex: 1, marginBottom: 14, borderRadius: 16, overflow: 'hidden' },
+  map: { flex: 1 },
+  mapHint: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    right: 10,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 10,
+    padding: 8,
+    fontSize: 12,
+    textAlign: 'center',
+    color: '#4C1D95',
   },
-  previewLabel: { color: '#7C3AED', fontSize: 14 },
-  previewCoords: { fontSize: 16, fontWeight: '600', color: '#4C1D95', marginTop: 4, marginBottom: 16 },
-  previewButton: { backgroundColor: '#EDE9FE', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 20 },
-  previewButtonText: { fontSize: 15, fontWeight: '600', color: '#6D28D9' },
   locationButton: {
     backgroundColor: '#fff',
     borderRadius: 14,

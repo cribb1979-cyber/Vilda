@@ -10,6 +10,7 @@ import ChatScreen from './ChatScreen';
 import SettingsScreen from './SettingsScreen';
 import FamilyMapScreen from './FamilyMapScreen';
 import SavedPlaceScreen from './SavedPlaceScreen';
+import PlacesListScreen from './PlacesListScreen';
 
 export default function ParentScreen() {
   const { signOut, profile } = useAuth();
@@ -19,6 +20,7 @@ export default function ParentScreen() {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [familyMapVisible, setFamilyMapVisible] = useState(false);
   const [addFriendVisible, setAddFriendVisible] = useState(false);
+  const [placesListVisible, setPlacesListVisible] = useState(false);
   const [displayName, setDisplayName] = useState('Vilda');
   const [childName, setChildName] = useState('');
   const [todayNote, setTodayNote] = useState(null);
@@ -203,9 +205,14 @@ export default function ParentScreen() {
         <Text style={styles.familyMapButtonText}>🗺️ Familjekarta</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.addFriendButton} onPress={() => setAddFriendVisible(true)}>
-        <Text style={styles.addFriendButtonText}>📍 Lägg till plats</Text>
-      </TouchableOpacity>
+      <View style={styles.placeRow}>
+        <TouchableOpacity style={styles.addFriendButton} onPress={() => setAddFriendVisible(true)}>
+          <Text style={styles.addFriendButtonText}>📍 Lägg till plats</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.addFriendButton} onPress={() => setPlacesListVisible(true)}>
+          <Text style={styles.addFriendButtonText}>📋 Mina platser</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.sectionTitle}>Larm & känslor</Text>
       <FlatList
@@ -228,6 +235,7 @@ export default function ParentScreen() {
         name="Platsen"
         allowMultiple
       />
+      <PlacesListScreen visible={placesListVisible} onClose={() => setPlacesListVisible(false)} />
     </View>
   );
 }
@@ -285,11 +293,12 @@ const styles = StyleSheet.create({
     borderColor: '#C4B5FD',
   },
   familyMapButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#6D28D9' },
+  placeRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
   addFriendButton: {
+    flex: 1,
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 24,
   },
   addFriendButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#6D28D9' },
   sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 10, color: '#4C1D95' },

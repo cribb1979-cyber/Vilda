@@ -11,6 +11,7 @@ import { callNumber, openWalkingDirections } from '../lib/maps';
 import { getDistanceMeters, formatDistance } from '../lib/distance';
 import { fetchAppDisplayName, fetchAiChatEnabled } from '../lib/appSettings';
 import SavedPlaceScreen from './SavedPlaceScreen';
+import PlacesListScreen from './PlacesListScreen';
 import ChatScreen from './ChatScreen';
 import FamilyMapScreen from './FamilyMapScreen';
 import LostScreen from './LostScreen';
@@ -32,6 +33,7 @@ export default function ChildScreen() {
   const [setHomeVisible, setSetHomeVisible] = useState(false);
   const [setSchoolVisible, setSetSchoolVisible] = useState(false);
   const [addFriendVisible, setAddFriendVisible] = useState(false);
+  const [placesListVisible, setPlacesListVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
   const [homeDirection, setHomeDirection] = useState(null); // { bearingLabel, distanceMeters }
   const [todayNote, setTodayNote] = useState(null);
@@ -268,9 +270,14 @@ export default function ChildScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.addFriendButton} onPress={() => setAddFriendVisible(true)}>
-        <Text style={styles.setHomeText}>📍 Lägg till plats</Text>
-      </TouchableOpacity>
+      <View style={styles.placeButtonRow}>
+        <TouchableOpacity style={styles.addFriendButton} onPress={() => setAddFriendVisible(true)}>
+          <Text style={styles.setHomeText}>📍 Lägg till plats</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.addFriendButton} onPress={() => setPlacesListVisible(true)}>
+          <Text style={styles.setHomeText}>📋 Mina platser</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.placeButtonRow}>
         <TouchableOpacity style={styles.directionsButton} onPress={() => handleDirections('hem', 'hem')}>
@@ -288,7 +295,7 @@ export default function ChildScreen() {
         label="hem"
         icon="🏠"
         title="Ställ in hem"
-        name="Hemplatsen"
+        name="Hem"
       />
       <SavedPlaceScreen
         visible={setSchoolVisible}
@@ -297,7 +304,7 @@ export default function ChildScreen() {
         label="skola"
         icon="🏫"
         title="Ställ in skola"
-        name="Skolplatsen"
+        name="Skola"
       />
       <SavedPlaceScreen
         visible={addFriendVisible}
@@ -309,6 +316,7 @@ export default function ChildScreen() {
         name="Platsen"
         allowMultiple
       />
+      <PlacesListScreen visible={placesListVisible} onClose={() => setPlacesListVisible(false)} />
       <ChatScreen visible={chatVisible} onClose={() => setChatVisible(false)} />
       <LostScreen visible={lostVisible} onClose={() => setLostVisible(false)} />
 
@@ -430,10 +438,10 @@ const styles = StyleSheet.create({
   },
   setHomeText: { textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#6D28D9' },
   addFriendButton: {
+    flex: 1,
     backgroundColor: '#EDE9FE',
     borderRadius: 16,
     padding: 14,
-    marginBottom: 14,
   },
   directionsButton: {
     flex: 1,
