@@ -42,7 +42,7 @@ export async function startBackgroundLocationTracking() {
       showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: 'Vilda delar din position',
-        notificationBody: 'Pappa kan se var du är för att hålla dig trygg.',
+        notificationBody: 'Din familj kan se var du är för att hålla dig trygg.',
       },
     });
   } catch (e) {

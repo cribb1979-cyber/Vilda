@@ -16,10 +16,12 @@ export default function FamilyMapScreen({ visible, onClose }) {
   const [people, setPeople] = useState([]);
   const [places, setPlaces] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
     if (!visible) return;
     setSelected(null);
+    setLoadError(null);
     loadEverything();
 
     const channel = supabase
@@ -41,16 +43,27 @@ export default function FamilyMapScreen({ visible, onClose }) {
   async function loadMyPosition() {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return;
-    const loc = await Location.getCurrentPositionAsync({});
-    setMyPosition({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+    try {
+      const loc = await Location.getCurrentPositionAsync({});
+      setMyPosition({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+    } catch (e) {
+      // Att din egen position saknas ska inte hindra kartan från att visas.
+    }
   }
 
   const loadPeople = useCallback(async () => {
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
       .select('*')
       .neq('id', profile.id)
       .or('role.eq.child,location_sharing_enabled.eq.true');
+
+    // Utan det här såg ett misslyckat anrop ut precis som "ingen delar sin
+    // position" — man trodde barnet var offline när det bara var nätet.
+    if (profilesError) {
+      setLoadError('Kunde inte hämta familjens positioner. Dra ner och försök igen.');
+      return;
+    }
 
     if (!profiles?.length) {
       setPeople([]);
@@ -58,11 +71,17 @@ export default function FamilyMapScreen({ visible, onClose }) {
     }
 
     const ids = profiles.map((p) => p.id);
-    const { data: locs } = await supabase
+    const { data: locs, error: locsError } = await supabase
       .from('locations')
       .select('*')
       .in('user_id', ids)
       .order('recorded_at', { ascending: false });
+
+    if (locsError) {
+      setLoadError('Kunde inte hämta familjens positioner.');
+      return;
+    }
+    setLoadError(null);
 
     const latestByUser = {};
     (locs || []).forEach((loc) => {
@@ -77,7 +96,11 @@ export default function FamilyMapScreen({ visible, onClose }) {
   }, [profile?.id]);
 
   async function loadPlaces() {
-    const { data } = await supabase.from('saved_places').select('*');
+    const { data, error } = await supabase.from('saved_places').select('*');
+    if (error) {
+      setLoadError('Kunde inte hämta platserna.');
+      return;
+    }
     setPlaces(data || []);
   }
 
@@ -115,6 +138,12 @@ export default function FamilyMapScreen({ visible, onClose }) {
             <Text style={styles.closeText}>Stäng</Text>
           </TouchableOpacity>
         </View>
+
+        {loadError && (
+          <TouchableOpacity style={styles.errorBanner} onPress={loadEverything}>
+            <Text style={styles.errorBannerText}>⚠️ {loadError}</Text>
+          </TouchableOpacity>
+        )}
 
         {loading ? (
           <View style={styles.loading}>
@@ -210,6 +239,14 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700', color: '#6D28D9' },
   closeText: { color: '#7C3AED', fontSize: 14 },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorBanner: {
+    backgroundColor: '#FEF3C7',
+    marginHorizontal: 20,
+    marginBottom: 10,
+    borderRadius: 12,
+    padding: 12,
+  },
+  errorBannerText: { color: '#92400E', fontSize: 14 },
   map: { flex: 1 },
   personPin: {
     width: 36,

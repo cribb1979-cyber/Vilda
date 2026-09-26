@@ -1,17 +1,20 @@
--- Vilda / Trygghetsapp - grundschema för FLERA familjer
--- Kör detta i Supabase Dashboard -> SQL Editor -> New query på ett NYTT projekt.
+-- ============================================================
+-- Vilda / Trygghetsapp - migrering till FLERA FAMILJER
 --
--- Har du redan en databas med data i, kör i stället:
---   supabase/migrering-familjer.sql
+-- Kör HELA filen en gång i Supabase Dashboard -> SQL Editor -> New query,
+-- på din BEFINTLIGA databas (den som redan kör den gamla schema.sql).
 --
--- All data är separerad per familj. En inloggad användare ser bara sin egen
--- familjs rader, och ingenting är läsbart utan inloggning.
+-- Efteråt är all data separerad per familj. Din befintliga data hamnar i
+-- familjen "Vår familj", och inbjudningskoden hittar du i appens
+-- inställningar efter att den nya appversionen är installerad.
+--
+-- Hela filen körs som en enda transaktion: går något fel rullas allt
+-- tillbaka och ingenting har ändrats.
+-- ============================================================
 
--- ============================================
--- HJÄLPFUNKTIONER
--- ============================================
+begin;
 
--- Inbjudningskod: 6 tecken ur ett alfabet utan 0/O/1/I, så den går att läsa upp.
+-- ---------- 1. Hjälpfunktioner ----------
 create or replace function generate_invite_code() returns text
 language sql volatile as $$
   select string_agg(
@@ -21,36 +24,30 @@ language sql volatile as $$
   from generate_series(1, 6)
 $$;
 
--- ============================================
--- FAMILIES (en rad per familj, med en inbjudningskod)
--- ============================================
-create table families (
+-- ---------- 2. Familjer ----------
+create table if not exists families (
   id uuid primary key default gen_random_uuid(),
   name text not null default 'Vår familj',
   invite_code text not null unique default generate_invite_code(),
   created_at timestamptz default now()
 );
 
--- ============================================
--- PROFILES (kopplas till Supabase Auth users)
--- ============================================
-create table profiles (
-  id uuid references auth.users on delete cascade primary key,
-  family_id uuid references families(id) on delete cascade,
-  role text not null check (role in ('parent', 'child')),
-  display_name text not null,
-  push_token text,
-  phone_number text,
-  location_sharing_enabled boolean not null default false,
-  created_at timestamptz default now()
-);
+-- ---------- 3. Varje profil hör till en familj ----------
+alter table profiles
+  add column if not exists family_id uuid references families(id) on delete cascade;
 
--- ============================================
--- VEM TILLHÖR VILKEN FAMILJ
+-- ---------- 4. Din befintliga data hamnar i en familj ----------
+insert into families (name)
+select 'Vår familj'
+where not exists (select 1 from families);
+
+update profiles
+set family_id = (select id from families order by created_at limit 1)
+where family_id is null;
+
+-- ---------- 5. Vem tillhör vilken familj ----------
 -- Alla är "security definer" så att de kan läsa profiles utan att fastna i
 -- sina egna regler (annars uppstår en oändlig loop).
--- ============================================
-
 create or replace function my_family_id() returns uuid
 language sql stable security definer set search_path = public as $$
   select family_id from profiles where id = auth.uid()
@@ -76,99 +73,79 @@ language sql stable security definer set search_path = public as $$
   )
 $$;
 
--- ============================================
--- LOCATIONS (senaste position + historik under en resa)
--- ============================================
-create table locations (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references profiles(id) not null,
-  latitude double precision not null,
-  longitude double precision not null,
-  battery_level integer, -- 0-100
-  is_charging boolean default false,
-  recorded_at timestamptz default now()
-);
+-- ---------- 6. Sparade platser hör till familjen ----------
+alter table saved_places
+  add column if not exists family_id uuid references families(id) on delete cascade;
 
-create index locations_user_recorded_idx on locations (user_id, recorded_at desc);
+-- Befintliga platser: till den som skapade dem, annars till första familjen.
+update saved_places sp
+set family_id = coalesce(
+  (select p.family_id from profiles p where p.id = sp.created_by),
+  (select id from families order by created_at limit 1)
+)
+where sp.family_id is null;
 
--- ============================================
--- TRIPS (en resa till/från skolan, för geofence-status)
--- ============================================
-create table trips (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references profiles(id) not null,
-  status text not null check (status in ('started', 'arrived', 'cancelled')) default 'started',
-  destination_label text, -- t.ex. 'skola' eller 'hem'
-  started_at timestamptz default now(),
-  ended_at timestamptz
-);
+alter table saved_places alter column family_id set not null;
+alter table saved_places alter column family_id set default my_family_id();
 
--- ============================================
--- MESSAGES
--- recipient_id = null  -> familjechatten, alla i familjen ser den
--- recipient_id = satt  -> privat meddelande, bara avsändaren och mottagaren ser det
--- ============================================
-create table messages (
-  id uuid default gen_random_uuid() primary key,
-  sender_id uuid references profiles(id) not null,
-  recipient_id uuid references profiles(id) on delete cascade,
-  content text not null,
-  message_type text default 'text' check (message_type in ('text', 'image', 'preset_feeling', 'sos', 'arrived', 'trip_started')),
-  is_read boolean default false,
-  created_at timestamptz default now()
-);
+-- En hem- och en skolplats PER FAMILJ (förut gällde det hela databasen).
+drop index if exists saved_places_unique_hem_skola;
+create unique index saved_places_unique_hem_skola
+  on saved_places (family_id, label)
+  where label in ('hem', 'skola');
 
-create index messages_created_idx on messages (created_at desc);
+-- ---------- 7. Riktade meddelanden ----------
+-- recipient_id = null -> familjechatten. Satt -> bara avsändare + mottagare.
+alter table messages
+  add column if not exists recipient_id uuid references profiles(id) on delete cascade;
+
+create index if not exists messages_created_idx on messages (created_at desc);
 -- En riktad tråd söks upp som (jag, du) eller (du, jag).
-create index messages_thread_idx on messages (sender_id, recipient_id);
+create index if not exists messages_thread_idx on messages (sender_id, recipient_id);
 
--- ============================================
--- ALERTS (SOS / orolig / kvar vid bytesplats)
--- ============================================
-create table alerts (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references profiles(id) not null,
-  alert_type text not null check (alert_type in ('sos', 'worried', 'byte_stuck')),
-  feeling text,
-  note text,
-  latitude double precision,
-  longitude double precision,
-  resolved boolean default false,
-  resolved_at timestamptz,
-  created_at timestamptz default now()
-);
+-- Ankomstnotisen (ankomstnotiser.sql) skriver message_type = 'arrived'. Finns
+-- en gammal check-regel kvar som inte tillåter det, fallerar triggern på varje
+-- position — därför ser vi till att listan är den nya. Regeln tas bort under
+-- vilket namn den än har.
+do $$
+declare
+  r record;
+begin
+  for r in
+    select con.conname
+    from pg_constraint con
+    join pg_class c on c.oid = con.conrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'messages'
+      and con.contype = 'c'
+      and pg_get_constraintdef(con.oid) ilike '%message_type%'
+  loop
+    execute format('alter table messages drop constraint %I', r.conname);
+  end loop;
+end $$;
 
--- ============================================
--- SAVED PLACES (hem, skola, mormor, bytesplats ...)
--- ============================================
-create table saved_places (
-  id uuid default gen_random_uuid() primary key,
-  family_id uuid not null default my_family_id() references families(id) on delete cascade,
-  label text not null, -- 'hem', 'skola', 'plats', 'byte'
-  name text not null, -- visningsnamn, t.ex. "Mammas hem"
-  latitude double precision not null,
-  longitude double precision not null,
-  radius_meters integer default 100,
-  dwell_minutes integer, -- endast för label='byte'
-  created_by uuid references profiles(id),
-  created_at timestamptz default now()
-);
+alter table messages add constraint messages_message_type_check
+  check (message_type in ('text', 'image', 'preset_feeling', 'sos', 'arrived', 'trip_started'));
 
--- En hem-plats och en skol-plats per familj, men flera andra platser tillåtna
-create unique index saved_places_unique_hem_skola on saved_places (family_id, label) where label in ('hem', 'skola');
+-- ---------- 8. Dagsnotering och appinställningar per familj ----------
+-- De var en enda rad för hela databasen. Vi sparar undan innehållet först
+-- så att din nuvarande dagsnotering och AI-inställning följer med.
+-- Ingen filtrering på id: den gamla tabellen hade alltid exakt en rad, och
+-- genom att inte nämna kolumnnamnet slipper migreringen gissa hur den såg ut.
+-- limit 1 gör att en oväntad extra rad inte kraschar hela körningen.
+create temp table _gammal_notering as select content from today_note limit 1;
+create temp table _gammal_inst as select display_name, ai_chat_enabled from app_settings limit 1;
 
--- ============================================
--- TODAY NOTE (förälderns dagsnotering, en per familj)
--- ============================================
+drop table if exists today_note;
+drop table if exists app_settings;
+
 create table today_note (
   family_id uuid primary key references families(id) on delete cascade,
   content text,
   updated_at timestamptz default now()
 );
 
--- ============================================
--- APP SETTINGS (familjens namn i appen + AI-chatten, en per familj)
--- ============================================
 create table app_settings (
   family_id uuid primary key references families(id) on delete cascade,
   display_name text not null default 'Familjen',
@@ -176,21 +153,44 @@ create table app_settings (
   updated_at timestamptz default now()
 );
 
--- ============================================
--- REGLER (Row Level Security)
--- ============================================
+insert into today_note (family_id, content)
+select (select id from families order by created_at limit 1), content from _gammal_notering;
+
+insert into app_settings (family_id, display_name, ai_chat_enabled)
+select (select id from families order by created_at limit 1), display_name, ai_chat_enabled from _gammal_inst;
+
+insert into app_settings (family_id)
+select f.id from families f
+where not exists (select 1 from app_settings s where s.family_id = f.id);
 
 alter table families enable row level security;
-alter table profiles enable row level security;
-alter table locations enable row level security;
-alter table trips enable row level security;
-alter table messages enable row level security;
-alter table alerts enable row level security;
-alter table saved_places enable row level security;
 alter table today_note enable row level security;
 alter table app_settings enable row level security;
 
--- FAMILIES: man ser sin egen familj (och därmed sin inbjudningskod).
+-- ---------- 9. Bort med de gamla reglerna ----------
+-- VIKTIGT: reglerna nedan togs bort med namn, och regler i Postgres är
+-- tillåtande var för sig — de läggs ihop med ELLER. En enda gammal regel som
+-- heter något annat än vi trodde skulle därför ligga kvar och ge varje
+-- inloggad användare åtkomst till allt, utan ett enda felmeddelande.
+-- Därför tar vi bort ALLA regler på tabellerna i stället för att gissa namn.
+do $$
+declare
+  r record;
+begin
+  for r in
+    select tablename, policyname
+    from pg_policies
+    where schemaname = 'public'
+      and tablename in (
+        'families', 'profiles', 'locations', 'trips', 'messages',
+        'alerts', 'saved_places', 'today_note', 'app_settings'
+      )
+  loop
+    execute format('drop policy %I on public.%I', r.policyname, r.tablename);
+  end loop;
+end $$;
+
+-- ---------- 10. Nya regler: bara den egna familjen ----------
 create policy "Se sin egen familj"
   on families for select
   using (id = my_family_id());
@@ -199,9 +199,6 @@ create policy "Föräldrar kan ändra familjen"
   on families for update
   using (id = my_family_id() and is_parent());
 
--- PROFILES: sin egen rad + alla i samma familj.
--- Ingen får skapa eller radera profiler direkt — det görs bara genom
--- funktionerna längst ner.
 create policy "Se sin familjs profiler"
   on profiles for select
   using (id = auth.uid() or family_id = my_family_id());
@@ -219,7 +216,6 @@ create policy "Uppdatera sin egen profil"
     and role is not distinct from my_role()
   );
 
--- LOCATIONS
 create policy "Se sin familjs positioner"
   on locations for select
   using (in_my_family(user_id));
@@ -228,7 +224,6 @@ create policy "Skriva sin egen position"
   on locations for insert
   with check (auth.uid() = user_id);
 
--- TRIPS
 create policy "Se sin familjs resor"
   on trips for select
   using (in_my_family(user_id));
@@ -237,8 +232,6 @@ create policy "Hantera sina egna resor"
   on trips for all
   using (auth.uid() = user_id);
 
--- MESSAGES: familjechatten ser alla i familjen. Ett riktat meddelande ser
--- bara avsändaren och mottagaren — inte ens den andra föräldern.
 create policy "Se familjechatten och sina egna trådar"
   on messages for select
   using (
@@ -261,7 +254,6 @@ create policy "Markera meddelanden som lästa"
     and (recipient_id is null or recipient_id = auth.uid() or sender_id = auth.uid())
   );
 
--- ALERTS
 create policy "Se sin familjs larm"
   on alerts for select
   using (in_my_family(user_id));
@@ -278,7 +270,6 @@ create policy "Radera sin familjs larm"
   on alerts for delete
   using (in_my_family(user_id));
 
--- SAVED PLACES
 create policy "Se sin familjs platser"
   on saved_places for select
   using (family_id = my_family_id());
@@ -317,14 +308,32 @@ create policy "Uppdatera sin familjs inställningar"
   on app_settings for update
   using (family_id = my_family_id() and is_parent());
 
--- ============================================
--- CHAT IMAGES (Storage-bucket för bilder i chatten)
--- Nya bilder läggs i en mapp per familj: <family_id>/<filnamn>.
--- Reglerna nedan gör att en familj bara kommer åt sin egen mapp.
--- ============================================
-insert into storage.buckets (id, name, public)
-values ('chat-images', 'chat-images', true)
-on conflict (id) do nothing;
+-- ---------- 11. Chattbilder: en mapp per familj ----------
+-- Förut kunde vem som helst som var inloggad lista hela bildmappen och
+-- därmed se alla familjers bilder. Nu kommer var familj bara åt sin egen.
+-- Samma sak här: hellre svepa bort allt som handlar om chattbilder än att
+-- lita på att vi minns namnen. Vi tar både regler som heter något med
+-- chattbilder och regler som nämner bucketens namn i själva villkoret.
+-- Regler för andra buckets rörs inte.
+do $$
+declare
+  r record;
+begin
+  for r in
+    select policyname
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and (
+        policyname ilike '%chattbild%'
+        or policyname ilike '%chat-images%'
+        or coalesce(qual, '') ilike '%chat-images%'
+        or coalesce(with_check, '') ilike '%chat-images%'
+      )
+  loop
+    execute format('drop policy %I on storage.objects', r.policyname);
+  end loop;
+end $$;
 
 create policy "Ladda upp familjens chattbilder"
   on storage.objects for insert
@@ -337,13 +346,9 @@ create policy "Se familjens chattbilder"
     and ((storage.foldername(name))[1] = my_family_id()::text or owner = auth.uid())
   );
 
--- ============================================
--- SKAPA KONTO / FAMILJ
--- De här funktionerna är det ENDA sättet att skapa en profil. De körs med
--- förhöjd rättighet, kontrollerar att man är inloggad, och ser till att en
--- användare bara kan få en enda profil (ingen kan byta familj i efterhand).
--- ============================================
-
+-- ---------- 12. Skapa konto / familj ----------
+-- Det ENDA sättet att skapa en profil. Körs med förhöjd rättighet,
+-- kontrollerar inloggning, och ger en användare exakt en profil.
 create or replace function create_family_and_profile(
   p_display_name text,
   p_family_name text default 'Vår familj'
@@ -404,7 +409,6 @@ begin
   return v_family;
 end $$;
 
--- Ny kod om den gamla skulle ha spridits. Bara föräldrar.
 create or replace function rotate_invite_code() returns text
 language plpgsql security definer set search_path = public as $$
 declare
@@ -424,13 +428,22 @@ begin
   return v_code;
 end $$;
 
--- ============================================
--- REALTIME (så appen får nya rader direkt)
--- ============================================
-alter publication supabase_realtime add table locations;
-alter publication supabase_realtime add table messages;
-alter publication supabase_realtime add table alerts;
-alter publication supabase_realtime add table trips;
-alter publication supabase_realtime add table today_note;
-alter publication supabase_realtime add table app_settings;
-alter publication supabase_realtime add table saved_places;
+commit;
+
+-- ---------- 13. Realtime ----------
+-- today_note och app_settings skapades om ovan. När en tabell tas bort
+-- försvinner den också ur publikationen, så de måste läggas tillbaka här.
+-- Utan det slutar dagsnoteringen och familjens namn att komma fram direkt
+-- till den andras telefon, utan att något ser ut att ha gått fel.
+-- Körs sist, efter commit, när allt annat är på plats.
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['saved_places', 'today_note', 'app_settings'] loop
+    begin
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    exception when duplicate_object then null;
+    end;
+  end loop;
+end $$;

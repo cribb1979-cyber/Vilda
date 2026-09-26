@@ -1,3 +1,5 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const MODEL = 'claude-haiku-4-5-20251001';
 
@@ -35,29 +37,103 @@ const SYSTEM_PROMPTS: Record<string, string> = {
     'vuxen först och att aldrig dela sitt namn, skola eller var man bor i en video.',
 };
 
+const ALLOWED_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+// Kameran på iOS ger jpeg, men en skärmbild är png. Skickades allt som jpeg
+// avvisade modellen bilden. Vi litar på vad telefonen säger om typen, och
+// tittar på filens första tecken om svaret saknas eller är okänt.
+function sniffMediaType(base64: string): string {
+  if (base64.startsWith('/9j/')) return 'image/jpeg';
+  if (base64.startsWith('iVBORw0KGgo')) return 'image/png';
+  if (base64.startsWith('R0lGOD')) return 'image/gif';
+  if (base64.startsWith('UklGR')) return 'image/webp';
+  return 'image/jpeg';
+}
+
+function resolveMediaType(base64: string, fromClient?: string): string {
+  if (fromClient && ALLOWED_MEDIA_TYPES.includes(fromClient)) return fromClient;
+  return sniffMediaType(base64);
+}
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
 Deno.serve(async (req) => {
   if (!ANTHROPIC_API_KEY) {
-    return new Response(JSON.stringify({ error: 'not_activated' }), {
-      status: 503,
-      headers: { 'content-type': 'application/json' },
-    });
+    return json({ error: 'not_activated' }, 503);
   }
 
-  const { mode, messages, imageBase64 } = await req.json();
-  const systemPrompt = SYSTEM_PROMPTS[mode] || SYSTEM_PROMPTS.prata;
+  // Funktionen kan anropas av vem som helst som har appens publika nyckel, och
+  // varje anrop kostar pengar hos Anthropic. Därför: bara en inloggad
+  // användare vars familj faktiskt har slagit på AI-chatten släpps igenom.
+  const userClient = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } }
+  );
 
-  const anthropicMessages = messages.map((m: { role: string; content: string }) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  const { data: userData, error: userError } = await userClient.auth.getUser();
+  if (userError || !userData?.user) {
+    return json({ error: 'unauthorized' }, 401);
+  }
 
-  if (imageBase64 && anthropicMessages.length) {
+  // Läses med användarens egen rättighet, så svaret är alltid den egna
+  // familjens rad — ingen kan läsa en annan familjs inställning här.
+  const { data: settings } = await userClient
+    .from('app_settings')
+    .select('ai_chat_enabled')
+    .maybeSingle();
+  if (!settings?.ai_chat_enabled) {
+    return json({ error: 'not_activated' }, 503);
+  }
+
+  let body: {
+    mode?: string;
+    messages?: { role: string; content: string }[];
+    imageBase64?: string;
+    imageMediaType?: string;
+  };
+  try {
+    body = await req.json();
+  } catch (e) {
+    return json({ error: 'bad_request' }, 400);
+  }
+
+  const { mode, messages, imageBase64, imageMediaType } = body;
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return json({ error: 'bad_request' }, 400);
+  }
+
+  const systemPrompt = SYSTEM_PROMPTS[mode || 'prata'] || SYSTEM_PROMPTS.prata;
+
+  // Anthropic kräver att historiken börjar med ett meddelande från
+  // användaren. Appen har en hälsning från assistenten först i listan, och så
+  // länge den fick följa med avvisades varenda fråga — barnet fick "Kunde
+  // inte svara" varje gång, hur rätt allt annat än var.
+  const anthropicMessages: { role: string; content: unknown }[] = messages
+    .filter((m: { role: string }) => m.role === 'user' || m.role === 'assistant')
+    .map((m: { role: string; content: string }) => ({ role: m.role, content: m.content }));
+
+  while (anthropicMessages.length && anthropicMessages[0].role !== 'user') {
+    anthropicMessages.shift();
+  }
+  if (anthropicMessages.length === 0) {
+    return json({ error: 'bad_request' }, 400);
+  }
+
+  if (imageBase64) {
+    const cleanBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
+    const mediaType = resolveMediaType(cleanBase64, imageMediaType);
     const last = anthropicMessages[anthropicMessages.length - 1];
     anthropicMessages[anthropicMessages.length - 1] = {
       role: 'user',
       content: [
-        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
-        { type: 'text', text: last.content },
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: cleanBase64 } },
+        { type: 'text', text: String(last.content) },
       ],
     };
   }
@@ -79,17 +155,12 @@ Deno.serve(async (req) => {
 
   if (!response.ok) {
     const details = await response.text();
-    return new Response(JSON.stringify({ error: 'ai_call_failed', details }), {
-      status: 502,
-      headers: { 'content-type': 'application/json' },
-    });
+    return json({ error: 'ai_call_failed', details }, 502);
   }
 
   const data = await response.json();
   const text =
     data.content?.[0]?.text || 'Förlåt, jag förstod inte riktigt. Kan du säga det på ett annat sätt?';
 
-  return new Response(JSON.stringify({ text }), {
-    headers: { 'content-type': 'application/json' },
-  });
+  return json({ text });
 });

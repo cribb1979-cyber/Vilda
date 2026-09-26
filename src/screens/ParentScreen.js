@@ -4,13 +4,18 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { openInMaps } from '../lib/maps';
 import { fetchAppDisplayName } from '../lib/appSettings';
-import { startGeofencing } from '../lib/geofencing';
 import { getDistanceMeters, formatDistance } from '../lib/distance';
 import ChatScreen from './ChatScreen';
 import SettingsScreen from './SettingsScreen';
 import FamilyMapScreen from './FamilyMapScreen';
 import SavedPlaceScreen from './SavedPlaceScreen';
 import PlacesListScreen from './PlacesListScreen';
+
+function placeStatusText(place) {
+  if (place.label === 'hem') return '🏠 Hemma';
+  if (place.label === 'skola') return '🏫 I skolan';
+  return `📍 ${place.name}`;
+}
 
 export default function ParentScreen() {
   const { signOut, profile } = useAuth();
@@ -22,29 +27,18 @@ export default function ParentScreen() {
   const [addFriendVisible, setAddFriendVisible] = useState(false);
   const [placesListVisible, setPlacesListVisible] = useState(false);
   const [addTransferVisible, setAddTransferVisible] = useState(false);
-  const [displayName, setDisplayName] = useState('Vilda');
+  const [displayName, setDisplayName] = useState('');
   const [childName, setChildName] = useState('');
   const [todayNote, setTodayNote] = useState(null);
   const [places, setPlaces] = useState([]);
 
+  const familyId = profile?.family_id;
+
   useEffect(() => {
     loadLatest();
     loadTodayNote();
-    fetchAppDisplayName().then(setDisplayName);
-    if (profile?.location_sharing_enabled) refreshHomeGeofencing();
-
-    supabase
-      .from('saved_places')
-      .select('*')
-      .in('label', ['hem', 'skola'])
-      .then(({ data }) => setPlaces(data || []));
-
-    const todayNoteChannel = supabase
-      .channel('today-note-parent')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'today_note' }, (payload) => {
-        setTodayNote(payload.new?.content || null);
-      })
-      .subscribe();
+    loadPlaces();
+    fetchAppDisplayName(familyId).then(setDisplayName);
 
     supabase
       .from('profiles')
@@ -54,14 +48,37 @@ export default function ParentScreen() {
       .maybeSingle()
       .then(({ data }) => setChildName(data?.display_name || ''));
 
+    const todayNoteChannel = supabase
+      .channel('today-note-parent')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'today_note', filter: `family_id=eq.${familyId}` },
+        (payload) => {
+          setTodayNote(payload.new?.content || null);
+        }
+      )
+      .subscribe();
+
     const settingsChannel = supabase
       .channel('app-settings')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
-        setDisplayName(payload.new?.display_name || 'Vilda');
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'app_settings', filter: `family_id=eq.${familyId}` },
+        (payload) => {
+          if (payload.new?.display_name) setDisplayName(payload.new.display_name);
+        }
+      )
+      .subscribe();
+
+    // Nya platser kan läggas till från en annan telefon. Utan den här
+    // prenumerationen skulle statusraden nedan visa fel tills appen startades om.
+    const placesChannel = supabase
+      .channel('parent-places')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'saved_places' }, () => {
+        loadPlaces();
       })
       .subscribe();
 
-    // Lyssna på nya positioner och larm i realtid
     const channel = supabase
       .channel('parent-feed')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'locations' }, (payload) => {
@@ -76,16 +93,21 @@ export default function ParentScreen() {
       supabase.removeChannel(channel);
       supabase.removeChannel(settingsChannel);
       supabase.removeChannel(todayNoteChannel);
+      supabase.removeChannel(placesChannel);
     };
-  }, []);
+  }, [familyId]);
 
-  async function refreshHomeGeofencing() {
-    const { data } = await supabase.from('saved_places').select('*').eq('label', 'hem').maybeSingle();
-    if (data) startGeofencing([data]);
+  async function loadPlaces() {
+    const { data } = await supabase.from('saved_places').select('*');
+    setPlaces(data || []);
   }
 
   async function loadTodayNote() {
-    const { data } = await supabase.from('today_note').select('*').eq('id', 1).maybeSingle();
+    const { data } = await supabase
+      .from('today_note')
+      .select('content')
+      .eq('family_id', familyId)
+      .maybeSingle();
     setTodayNote(data?.content || null);
   }
 
@@ -95,8 +117,8 @@ export default function ParentScreen() {
       .select('*')
       .order('recorded_at', { ascending: false })
       .limit(1)
-      .single();
-    setLastLocation(loc);
+      .maybeSingle();
+    setLastLocation(loc || null);
 
     const { data } = await supabase
       .from('alerts')
@@ -128,18 +150,19 @@ export default function ParentScreen() {
     ? Math.round((Date.now() - new Date(lastLocation.recorded_at)) / 60000)
     : null;
 
+  // Namnger platsen hon är på i stället för att bara säga "hemma" eller "ute",
+  // så att en plats man lagt till hemifrån syns direkt i statusraden.
   const locationStatus = (() => {
     if (!lastLocation) return null;
     for (const place of places) {
+      if (place.label === 'byte') continue;
       const distance = getDistanceMeters(
         lastLocation.latitude,
         lastLocation.longitude,
         place.latitude,
         place.longitude
       );
-      if (distance <= (place.radius_meters || 100)) {
-        return place.label === 'hem' ? '🏠 Hemma' : '🏫 I skolan';
-      }
+      if (distance <= (place.radius_meters || 100)) return placeStatusText(place);
     }
     const home = places.find((p) => p.label === 'hem');
     if (home) {
@@ -157,7 +180,7 @@ export default function ParentScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{displayName} 💜</Text>
+        <Text style={styles.title}>{displayName || 'Familjen'} 💜</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity onPress={() => setChatVisible(true)}>
             <Text style={styles.chatLink}>💬 Chatt</Text>
@@ -174,7 +197,9 @@ export default function ParentScreen() {
       <View style={styles.statusCard}>
         {lastLocation ? (
           <>
-            <Text style={styles.statusLabel}>Senast sedd</Text>
+            <Text style={styles.statusLabel}>
+              Senast sedd{childName ? ` – ${childName}` : ''}
+            </Text>
             <Text style={styles.statusValue}>
               {minutesAgo === 0 ? 'Just nu' : `${minutesAgo} min sedan`}
             </Text>
@@ -233,7 +258,7 @@ export default function ParentScreen() {
       <SavedPlaceScreen
         visible={addFriendVisible}
         onClose={() => setAddFriendVisible(false)}
-        onSaved={() => {}}
+        onSaved={loadPlaces}
         label="plats"
         icon="📍"
         title="Lägg till plats"

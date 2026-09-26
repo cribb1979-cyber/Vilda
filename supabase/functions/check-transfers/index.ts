@@ -15,72 +15,92 @@ function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number) 
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Körs med service-nyckeln och går därför förbi reglerna i databasen. Allt
+// måste avgränsas per familj här i koden — annars hade ett barn i en familj
+// kunnat larma om en bytesplats som tillhör en helt annan familj.
 Deno.serve(async () => {
   const { data: transferPlaces } = await supabase.from('saved_places').select('*').eq('label', 'byte');
   if (!transferPlaces?.length) return new Response('no transfer places', { status: 200 });
 
-  const { data: child } = await supabase.from('profiles').select('id').eq('role', 'child').limit(1).maybeSingle();
-  if (!child) return new Response('no child profile', { status: 200 });
+  const byFamily = new Map<string, typeof transferPlaces>();
+  for (const place of transferPlaces) {
+    if (!place.family_id) continue;
+    const list = byFamily.get(place.family_id) || [];
+    list.push(place);
+    byFamily.set(place.family_id, list);
+  }
 
   const checked: string[] = [];
 
-  for (const place of transferPlaces) {
-    const dwellMinutes = place.dwell_minutes || 15;
-    const windowMinutes = dwellMinutes + 10;
-    const since = new Date(Date.now() - windowMinutes * 60000).toISOString();
-
-    const { data: locations } = await supabase
-      .from('locations')
-      .select('*')
-      .eq('user_id', child.id)
-      .gte('recorded_at', since)
-      .order('recorded_at', { ascending: false });
-
-    if (!locations?.length) continue;
-
-    const latest = locations[0];
-    const latestDistance = distanceMeters(
-      latest.latitude,
-      latest.longitude,
-      place.latitude,
-      place.longitude
-    );
-    if (latestDistance > (place.radius_meters || 100)) continue; // redan lämnat platsen
-
-    // Hitta hur länge barnet varit kvar (utan uppehåll) i zonen
-    let entryTime = latest.recorded_at;
-    for (const loc of locations) {
-      const d = distanceMeters(loc.latitude, loc.longitude, place.latitude, place.longitude);
-      if (d > (place.radius_meters || 100)) break;
-      entryTime = loc.recorded_at;
-    }
-
-    const dwellMs = Date.now() - new Date(entryTime).getTime();
-    const dwellActualMinutes = Math.round(dwellMs / 60000);
-    if (dwellActualMinutes < dwellMinutes) continue;
-
-    const noteId = `place:${place.id}`;
-    const { data: existingAlert } = await supabase
-      .from('alerts')
+  for (const [familyId, places] of byFamily) {
+    const { data: children } = await supabase
+      .from('profiles')
       .select('id')
-      .eq('alert_type', 'byte_stuck')
-      .eq('note', noteId)
-      .gte('created_at', entryTime)
-      .limit(1)
-      .maybeSingle();
+      .eq('family_id', familyId)
+      .eq('role', 'child');
 
-    if (existingAlert) continue; // redan larmat för den här bytesperioden
+    if (!children?.length) continue;
 
-    await supabase.from('alerts').insert({
-      user_id: child.id,
-      alert_type: 'byte_stuck',
-      feeling: `🚏 Kvar vid ${place.name} i ${dwellActualMinutes} min`,
-      note: noteId,
-      latitude: latest.latitude,
-      longitude: latest.longitude,
-    });
+    for (const child of children) {
+      for (const place of places) {
+        const dwellMinutes = place.dwell_minutes || 15;
+        const windowMinutes = dwellMinutes + 10;
+        const since = new Date(Date.now() - windowMinutes * 60000).toISOString();
 
-    checked.push(place.name);
+        const { data: locations } = await supabase
+          .from('locations')
+          .select('*')
+          .eq('user_id', child.id)
+          .gte('recorded_at', since)
+          .order('recorded_at', { ascending: false });
+
+        if (!locations?.length) continue;
+
+        const latest = locations[0];
+        const latestDistance = distanceMeters(
+          latest.latitude,
+          latest.longitude,
+          place.latitude,
+          place.longitude
+        );
+        if (latestDistance > (place.radius_meters || 100)) continue; // redan lämnat platsen
+
+        // Hitta hur länge barnet varit kvar (utan uppehåll) i zonen
+        let entryTime = latest.recorded_at;
+        for (const loc of locations) {
+          const d = distanceMeters(loc.latitude, loc.longitude, place.latitude, place.longitude);
+          if (d > (place.radius_meters || 100)) break;
+          entryTime = loc.recorded_at;
+        }
+
+        const dwellMs = Date.now() - new Date(entryTime).getTime();
+        const dwellActualMinutes = Math.round(dwellMs / 60000);
+        if (dwellActualMinutes < dwellMinutes) continue;
+
+        const noteId = `place:${place.id}`;
+        const { data: existingAlert } = await supabase
+          .from('alerts')
+          .select('id')
+          .eq('alert_type', 'byte_stuck')
+          .eq('note', noteId)
+          .gte('created_at', entryTime)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingAlert) continue; // redan larmat för den här bytesperioden
+
+        await supabase.from('alerts').insert({
+          user_id: child.id,
+          alert_type: 'byte_stuck',
+          feeling: `🚏 Kvar vid ${place.name} i ${dwellActualMinutes} min`,
+          note: noteId,
+          latitude: latest.latitude,
+          longitude: latest.longitude,
+        });
+
+        checked.push(`${place.name} (${dwellActualMinutes} min)`);
+      }
+    }
   }
 
   return new Response(JSON.stringify({ alerted: checked }), {

@@ -31,6 +31,7 @@ export default function SavedPlaceScreen({
   const [address, setAddress] = useState('');
   const [friendName, setFriendName] = useState('');
   const [dwellMinutes, setDwellMinutes] = useState('15');
+  const [radiusMeters, setRadiusMeters] = useState('100');
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -44,6 +45,7 @@ export default function SavedPlaceScreen({
         setExistingId(editingPlace.id);
         setFriendName(editingPlace.name || '');
         setDwellMinutes(String(editingPlace.dwell_minutes || 15));
+        setRadiusMeters(String(editingPlace.radius_meters || 100));
         setAddress('');
         setLoadingInitial(false);
         return;
@@ -51,6 +53,7 @@ export default function SavedPlaceScreen({
       setFriendName('');
       setExistingId(null);
       setDwellMinutes('15');
+      setRadiusMeters('100');
       setAddress('');
       loadInitial();
     }
@@ -60,28 +63,46 @@ export default function SavedPlaceScreen({
     setLoadingInitial(true);
 
     if (!allowMultiple) {
-      const { data: place } = await supabase
+      const { data: place, error: placeError } = await supabase
         .from('saved_places')
         .select('*')
         .eq('label', label)
         .maybeSingle();
 
+      // En misslyckad läsning får inte se ut som "ingen plats sparad". Då
+      // försöker appen lägga till en ny Hem-rad i stället för att ändra den
+      // som finns, och krockar med unik-indexet för hem/skola.
+      if (placeError) {
+        Alert.alert('Kunde inte hämta platsen', placeError.message);
+        setLoadingInitial(false);
+        return;
+      }
+
       if (place) {
         setMarker({ latitude: place.latitude, longitude: place.longitude });
         setExistingId(place.id);
+        setRadiusMeters(String(place.radius_meters || 100));
         setLoadingInitial(false);
         return;
       }
     }
 
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status === 'granted') {
-      const loc = await Location.getCurrentPositionAsync({});
-      setMarker({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-    } else {
+    // Positionen kan misslyckas även med tillstånd — platstjänsten kan vara
+    // avstängd i telefonen, och då kastar anropet i stället för att svara.
+    // Utan try/catch stannade laddningssnurran för alltid.
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({});
+        setMarker({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      } else {
+        setMarker(STOCKHOLM);
+      }
+    } catch (e) {
       setMarker(STOCKHOLM);
+    } finally {
+      setLoadingInitial(false);
     }
-    setLoadingInitial(false);
   }
 
   function moveTo(latitude, longitude) {
@@ -110,13 +131,20 @@ export default function SavedPlaceScreen({
   }
 
   async function handleUseCurrentLocation() {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Ingen åtkomst till plats', 'Vilda behöver tillgång till din position.');
-      return;
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Ingen åtkomst till plats', 'Vilda behöver tillgång till din position.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({});
+      moveTo(loc.coords.latitude, loc.coords.longitude);
+    } catch (e) {
+      Alert.alert(
+        'Kunde inte hämta positionen',
+        'Slå på platstjänster i telefonens inställningar och försök igen.'
+      );
     }
-    const loc = await Location.getCurrentPositionAsync({});
-    moveTo(loc.coords.latitude, loc.coords.longitude);
   }
 
   async function handleSave() {
@@ -132,6 +160,11 @@ export default function SavedPlaceScreen({
     if (isTransferStop) {
       row.dwell_minutes = parseInt(dwellMinutes, 10) || 15;
     }
+    // Radien styr hur nära hon måste vara för att "har kommit fram" ska larma.
+    // En negativ radie kan aldrig uppfyllas — avståndet är alltid positivt —
+    // och då skulle platsen sluta larma helt, utan att något syns. 0 blir 100.
+    const parsedRadius = parseInt(radiusMeters, 10) || 100;
+    row.radius_meters = Math.max(parsedRadius, 20);
 
     const { error } = existingId
       ? await supabase.from('saved_places').update(row).eq('id', existingId)
@@ -180,6 +213,19 @@ export default function SavedPlaceScreen({
               keyboardType="number-pad"
             />
             <Text style={styles.dwellLabel}>minuter</Text>
+          </View>
+        )}
+
+        {!isTransferStop && (
+          <View style={styles.dwellRow}>
+            <Text style={styles.dwellLabel}>Säg till när hon är inom</Text>
+            <TextInput
+              style={styles.dwellInput}
+              value={radiusMeters}
+              onChangeText={setRadiusMeters}
+              keyboardType="number-pad"
+            />
+            <Text style={styles.dwellLabel}>meter</Text>
           </View>
         )}
 

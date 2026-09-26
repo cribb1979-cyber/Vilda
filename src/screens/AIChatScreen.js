@@ -98,7 +98,7 @@ export default function AIChatScreen({ visible, onClose, onEmergency, appName })
     setMessages([{ role: 'assistant', content: m.greeting }]);
   }
 
-  async function sendMessage(imageBase64) {
+  async function sendMessage(imageBase64, imageMediaType) {
     if (!text.trim() && !imageBase64) return;
     const userText = text.trim() || 'Titta på bilden jag skickade.';
     const newMessages = [...messages, { role: 'user', content: userText }];
@@ -107,21 +107,34 @@ export default function AIChatScreen({ visible, onClose, onEmergency, appName })
     setSending(true);
 
     const { data, error } = await supabase.functions.invoke('ai-chat', {
-      body: { mode: mode.key, messages: newMessages, imageBase64 },
+      body: { mode: mode.key, messages: newMessages, imageBase64, imageMediaType },
     });
 
     setSending(false);
 
-    if (error || data?.error === 'not_activated') {
+    // Vid ett fel svarar funktionen med en statuskod, och då ligger kroppen i
+    // error.context i stället för i data. Förut läste vi bara data — vilket
+    // gjorde att varenda fel, även "kunde inte nå servern", visades som
+    // "AI-hjälpen är inte aktiverad än".
+    let payload = data;
+    if (error) {
+      try {
+        payload = await error.context?.json();
+      } catch (e) {
+        payload = null;
+      }
+    }
+
+    if (payload?.error === 'not_activated') {
       setNotActivated(true);
       return;
     }
-    if (error || !data?.text) {
-      Alert.alert('Kunde inte svara', 'Något gick fel, försök igen.');
+    if (error || !payload?.text) {
+      Alert.alert('Kunde inte svara', 'Något gick fel, försök igen om en liten stund.');
       return;
     }
 
-    setMessages((prev) => [...prev, { role: 'assistant', content: data.text }]);
+    setMessages((prev) => [...prev, { role: 'assistant', content: payload.text }]);
   }
 
   async function handlePickImage() {
@@ -131,13 +144,20 @@ export default function AIChatScreen({ visible, onClose, onEmergency, appName })
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.5,
+      // Bilden ska skickas som den filtyp den faktiskt är — annars kan en
+      // hemskärmsbild (PNG) skickas som jpeg och avvisas av modellen.
+      exif: false,
+    });
     if (result.canceled || !result.assets?.length) return;
 
+    const asset = result.assets[0];
     setUploadingImage(true);
     try {
-      const base64 = await FileSystem.readAsStringAsync(result.assets[0].uri, { encoding: 'base64' });
-      await sendMessage(base64);
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' });
+      await sendMessage(base64, asset.mimeType);
     } finally {
       setUploadingImage(false);
     }

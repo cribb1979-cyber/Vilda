@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ActivityIndicator, Alert } from 'react-native';
 import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import { supabase } from '../lib/supabase';
@@ -14,8 +14,10 @@ const STEPS = [
   'Tryck på "Jag behöver hjälp".',
 ];
 
-const CALM_MESSAGE =
-  'Du är trygg. Pappa ser var du är och kommer hjälpa dig. Andas lugnt, ett andetag i taget.';
+// Sagt högt till ett barn som är rädd. Namnet på föräldern kommer från
+// profilen — i en familj med två föräldrar, eller en mamma, var "Pappa" fel.
+const calmMessage = (parentName) =>
+  `Du är trygg. ${parentName} ser var du är och kommer hjälpa dig. Andas lugnt, ett andetag i taget.`;
 
 export default function LostScreen({ visible, onClose }) {
   const { profile } = useAuth();
@@ -25,15 +27,31 @@ export default function LostScreen({ visible, onClose }) {
   const [myPosition, setMyPosition] = useState(null);
   const [distances, setDistances] = useState([]);
   const [parent, setParent] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+
+  const parentName = parent?.display_name || 'En förälder';
 
   useEffect(() => {
     if (!visible) return;
     setHelpRequested(false);
+    setLoadError(null);
     loadEverything();
   }, [visible]);
 
   async function loadEverything() {
     setLoading(true);
+    try {
+      await loadEverythingInner();
+    } catch (e) {
+      // Utan det här blev skärmen hängande på en snurra utan stäng-knapp om
+      // positionen eller nätet strulade — och barnet kunde inte ta sig ur.
+      setLoadError('Kunde inte hämta allt just nu. Du kan ändå be om hjälp.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadEverythingInner() {
     const { status } = await Location.requestForegroundPermissionsAsync();
     const loc = status === 'granted' ? await Location.getCurrentPositionAsync({}) : null;
     const here = loc ? { latitude: loc.coords.latitude, longitude: loc.coords.longitude } : null;
@@ -84,25 +102,44 @@ export default function LostScreen({ visible, onClose }) {
       }
     }
     setDistances(rows);
-    setLoading(false);
   }
 
   async function handleRequestHelp() {
     setSending(true);
-    const loc = myPosition || (await Location.getCurrentPositionAsync({})).coords;
-    await supabase.from('alerts').insert({
-      user_id: profile.id,
-      alert_type: 'worried',
-      feeling: '🧭 Jag är vilse',
-      latitude: loc.latitude,
-      longitude: loc.longitude,
-    });
-    setSending(false);
-    setHelpRequested(true);
+    try {
+      let coords = myPosition;
+      if (!coords) {
+        const loc = await Location.getCurrentPositionAsync({});
+        coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      }
+
+      const { error } = await supabase.from('alerts').insert({
+        user_id: profile.id,
+        alert_type: 'worried',
+        feeling: '🧭 Jag är vilse',
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      });
+
+      // Förut stod det "Pappa vet nu var du är" även när larmet inte gick
+      // fram. Det är det värsta stället i appen att ljuga på.
+      if (error) {
+        Alert.alert(
+          'Larmet gick inte fram',
+          'Prova igen. Går det fortfarande inte, ring genom att trycka på "Ring".'
+        );
+        return;
+      }
+      setHelpRequested(true);
+    } catch (e) {
+      Alert.alert('Larmet gick inte fram', 'Prova igen om en liten stund.');
+    } finally {
+      setSending(false);
+    }
   }
 
   function playCalmMessage() {
-    Speech.speak(CALM_MESSAGE, { language: 'sv-SE', rate: 0.92 });
+    Speech.speak(calmMessage(parentName), { language: 'sv-SE', rate: 0.92 });
   }
 
   function handleCallParent() {
@@ -116,10 +153,14 @@ export default function LostScreen({ visible, onClose }) {
         {loading ? (
           <View style={styles.loading}>
             <ActivityIndicator size="large" color="#7C3AED" />
+            <Text style={styles.loadingText}>Hämtar din position...</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Text style={styles.closeText}>Stäng</Text>
+            </TouchableOpacity>
           </View>
         ) : helpRequested ? (
           <>
-            <Text style={styles.title}>💛 Pappa vet nu var du är</Text>
+            <Text style={styles.title}>💛 {parentName} vet nu var du är</Text>
             <Text style={styles.subtitle}>Håll dig kvar där du är, hjälp är på väg.</Text>
 
             <TouchableOpacity style={styles.calmButton} onPress={playCalmMessage}>
@@ -128,7 +169,7 @@ export default function LostScreen({ visible, onClose }) {
 
             {parent?.phone_number && (
               <TouchableOpacity style={styles.callButton} onPress={handleCallParent}>
-                <Text style={styles.callButtonText}>📞 Ring pappa</Text>
+                <Text style={styles.callButtonText}>📞 Ring {parentName}</Text>
               </TouchableOpacity>
             )}
 
@@ -140,6 +181,12 @@ export default function LostScreen({ visible, onClose }) {
           <>
             <Text style={styles.title}>💛 Lugn, du är inte ensam.</Text>
             <Text style={styles.subtitle}>Vi hjälper dig steg för steg.</Text>
+
+            {loadError && (
+              <View style={styles.errorCard}>
+                <Text style={styles.errorText}>{loadError}</Text>
+              </View>
+            )}
 
             <View style={styles.stepsCard}>
               {STEPS.map((step, i) => (
@@ -184,6 +231,9 @@ export default function LostScreen({ visible, onClose }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F3FF', padding: 24, paddingTop: 70 },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: '#7C3AED', marginTop: 14, marginBottom: 24 },
+  errorCard: { backgroundColor: '#FEF3C7', borderRadius: 14, padding: 14, marginBottom: 20 },
+  errorText: { color: '#92400E', fontSize: 14 },
   title: { fontSize: 24, fontWeight: '700', color: '#6D28D9', marginBottom: 6 },
   subtitle: { fontSize: 16, color: '#7C3AED', marginBottom: 24 },
   stepsCard: { backgroundColor: '#fff', borderRadius: 18, padding: 18, marginBottom: 20 },

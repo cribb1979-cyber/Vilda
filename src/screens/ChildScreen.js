@@ -5,7 +5,6 @@ import * as Battery from 'expo-battery';
 import * as Speech from 'expo-speech';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { startGeofencing } from '../lib/geofencing';
 import { startBackgroundLocationTracking } from '../lib/backgroundLocation';
 import { callNumber, openWalkingDirections } from '../lib/maps';
 import { getDistanceMeters, formatDistance } from '../lib/distance';
@@ -24,8 +23,8 @@ const FEELINGS = [
   { key: 'ensam', label: '😔 Jag känner mig ensam' },
 ];
 
-const CALM_MESSAGE =
-  'Du är trygg. Pappa ser var du är och kommer hjälpa dig. Andas lugnt, ett andetag i taget.';
+const calmMessage = (parentName) =>
+  `Du är trygg. ${parentName} ser var du är och kommer hjälpa dig. Andas lugnt, ett andetag i taget.`;
 
 export default function ChildScreen() {
   const { profile, signOut } = useAuth();
@@ -43,37 +42,60 @@ export default function ChildScreen() {
   const [aiChatVisible, setAiChatVisible] = useState(false);
   const [aiChatEnabled, setAiChatEnabled] = useState(false);
   const [appName, setAppName] = useState('Vilda');
+  const [parentName, setParentName] = useState('Förälder');
   const pulse = useRef(new Animated.Value(1)).current;
 
+  const familyId = profile?.family_id;
+
   useEffect(() => {
+    if (!familyId) return;
     startTracking();
-    refreshGeofencing();
     loadTodayNote();
-    fetchAppDisplayName().then(setAppName);
-    fetchAiChatEnabled().then(setAiChatEnabled);
+    fetchAppDisplayName(familyId).then(setAppName);
+    fetchAiChatEnabled(familyId).then(setAiChatEnabled);
+
+    supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('role', 'parent')
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setParentName(data?.display_name || 'Förälder'));
 
     const channel = supabase
       .channel('today-note-child')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'today_note' }, (payload) => {
-        setTodayNote(payload.new?.content || null);
-      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'today_note', filter: `family_id=eq.${familyId}` },
+        (payload) => {
+          setTodayNote(payload.new?.content || null);
+        }
+      )
       .subscribe();
 
     const appSettingsChannel = supabase
       .channel('app-settings-child')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
-        setAiChatEnabled(payload.new?.ai_chat_enabled || false);
-      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'app_settings', filter: `family_id=eq.${familyId}` },
+        (payload) => {
+          setAiChatEnabled(payload.new?.ai_chat_enabled || false);
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
       supabase.removeChannel(appSettingsChannel);
     };
-  }, []);
+  }, [familyId]);
 
   async function loadTodayNote() {
-    const { data } = await supabase.from('today_note').select('*').eq('id', 1).maybeSingle();
+    const { data } = await supabase
+      .from('today_note')
+      .select('content')
+      .eq('family_id', familyId)
+      .maybeSingle();
     setTodayNote(data?.content || null);
   }
 
@@ -87,7 +109,7 @@ export default function ChildScreen() {
       .maybeSingle();
 
     if (!parent?.phone_number) {
-      Alert.alert('Inget nummer sparat', 'Pappa har inte lagt in sitt telefonnummer än.');
+      Alert.alert('Inget nummer sparat', `${parentName} har inte lagt in sitt telefonnummer än.`);
       return;
     }
     callNumber(parent.phone_number);
@@ -105,11 +127,6 @@ export default function ChildScreen() {
       return;
     }
     openWalkingDirections(place.latitude, place.longitude, placeName);
-  }
-
-  async function refreshGeofencing() {
-    const { data } = await supabase.from('saved_places').select('*').in('label', ['hem', 'skola']);
-    if (data?.length) startGeofencing(data);
   }
 
   async function startTracking() {
@@ -173,7 +190,7 @@ export default function ChildScreen() {
   }
 
   function playCalmMessage() {
-    Speech.speak(CALM_MESSAGE, { language: 'sv-SE', rate: 0.92 });
+    Speech.speak(calmMessage(parentName), { language: 'sv-SE', rate: 0.92 });
   }
 
   async function findWayHome() {
@@ -222,7 +239,7 @@ export default function ChildScreen() {
         </View>
       </View>
 
-      <Text style={styles.helper}>Pappa ser var du är just nu 📍</Text>
+      <Text style={styles.helper}>{parentName} ser var du är just nu 📍</Text>
 
       <TouchableOpacity style={styles.mapButton} onPress={() => setFamilyMapVisible(true)}>
         <Text style={styles.mapButtonText}>🗺️ Familjekarta</Text>
@@ -296,7 +313,7 @@ export default function ChildScreen() {
       <SavedPlaceScreen
         visible={setHomeVisible}
         onClose={() => setSetHomeVisible(false)}
-        onSaved={refreshGeofencing}
+        onSaved={() => {}}
         label="hem"
         icon="🏠"
         title="Ställ in hem"
@@ -305,7 +322,7 @@ export default function ChildScreen() {
       <SavedPlaceScreen
         visible={setSchoolVisible}
         onClose={() => setSetSchoolVisible(false)}
-        onSaved={refreshGeofencing}
+        onSaved={() => {}}
         label="skola"
         icon="🏫"
         title="Ställ in skola"
@@ -349,7 +366,7 @@ export default function ChildScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Vad känner du? 💛</Text>
-            <Text style={styles.modalSubtitle}>Pappa får veta direkt.</Text>
+            <Text style={styles.modalSubtitle}>{parentName} får veta direkt.</Text>
 
             {FEELINGS.map((f) => (
               <TouchableOpacity
@@ -366,7 +383,7 @@ export default function ChildScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.callButton} onPress={handleCallParent}>
-              <Text style={styles.callButtonText}>📞 Ring pappa</Text>
+              <Text style={styles.callButtonText}>📞 Ring {parentName}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setWorriedVisible(false)}>

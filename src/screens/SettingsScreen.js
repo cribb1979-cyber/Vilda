@@ -13,11 +13,13 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   Platform,
+  Share,
 } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { startBackgroundLocationTracking, stopBackgroundLocationTracking } from '../lib/backgroundLocation';
-import { startGeofencing } from '../lib/geofencing';
+import { registerForPushNotifications } from '../lib/pushNotifications';
 
 export default function SettingsScreen({ visible, onClose }) {
   const { profile } = useAuth();
@@ -26,40 +28,136 @@ export default function SettingsScreen({ visible, onClose }) {
   const [appDisplayName, setAppDisplayName] = useState('');
   const [locationSharing, setLocationSharing] = useState(false);
   const [aiChatEnabled, setAiChatEnabled] = useState(false);
+  const [familyName, setFamilyName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [savingPhone, setSavingPhone] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const [savingName, setSavingName] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [pushGranted, setPushGranted] = useState(true);
+
+  const familyId = profile?.family_id;
 
   useEffect(() => {
     if (visible) loadSettings();
   }, [visible]);
 
   async function loadSettings() {
-    const { data: freshProfile } = await supabase
+    checkPushPermission();
+
+    // Utan familj finns inga familjerader att hämta, och .eq('family_id',
+    // undefined) blir en ogiltig fråga som bara svarar med fel.
+    if (!familyId) return;
+
+    const { data: freshProfile, error: profileError } = await supabase
       .from('profiles')
       .select('phone_number, location_sharing_enabled')
       .eq('id', profile.id)
       .maybeSingle();
-    setPhoneNumber(freshProfile?.phone_number || '');
-    setLocationSharing(freshProfile?.location_sharing_enabled || false);
 
-    const { data } = await supabase.from('today_note').select('*').eq('id', 1).maybeSingle();
-    setTodayNote(data?.content || '');
+    // Bara skriv över fälten om läsningen faktiskt gick igenom. Annars ser det
+    // ut som att numret är borta och nästa "Spara" raderar det på riktigt.
+    if (profileError) {
+      Alert.alert('Kunde inte hämta inställningarna', profileError.message);
+    } else if (freshProfile) {
+      setPhoneNumber(freshProfile.phone_number || '');
+      setLocationSharing(freshProfile.location_sharing_enabled || false);
+    }
 
-    const { data: appSettings } = await supabase
+    // Samma regel för noteringen och appnamnet: ett misslyckat svar får inte
+    // tömmas i fältet, för då raderar nästa "Spara" det som stod där.
+    const { data: note, error: noteError } = await supabase
+      .from('today_note')
+      .select('content')
+      .eq('family_id', familyId)
+      .maybeSingle();
+    if (!noteError) setTodayNote(note?.content || '');
+
+    const { data: appSettings, error: settingsError } = await supabase
       .from('app_settings')
       .select('display_name, ai_chat_enabled')
-      .eq('id', 1)
+      .eq('family_id', familyId)
       .maybeSingle();
-    setAppDisplayName(appSettings?.display_name || 'Vilda');
-    setAiChatEnabled(appSettings?.ai_chat_enabled || false);
+    if (!settingsError) {
+      setAppDisplayName(appSettings?.display_name || '');
+      setAiChatEnabled(appSettings?.ai_chat_enabled || false);
+    }
+
+    const { data: family, error: familyError } = await supabase
+      .from('families')
+      .select('name, invite_code')
+      .eq('id', familyId)
+      .maybeSingle();
+    if (!familyError) {
+      setFamilyName(family?.name || '');
+      setInviteCode(family?.invite_code || '');
+    }
+  }
+
+  async function checkPushPermission() {
+    const { status } = await Notifications.getPermissionsAsync();
+    setPushGranted(status === 'granted');
+  }
+
+  // Notiserna är hela poängen med appen. Är de avstängda i telefonen ska det
+  // stå här, inte vara tyst.
+  async function handleEnablePush() {
+    const result = await registerForPushNotifications(profile.id);
+    await checkPushPermission();
+    if (!result.ok) {
+      Alert.alert(
+        'Notiser är fortfarande av',
+        result.reason === 'permission_denied'
+          ? 'Slå på notiser för appen i telefonens inställningar (Inställningar → Aviseringar).'
+          : 'Kunde inte slå på notiser just nu. Kontrollera anslutningen och försök igen.'
+      );
+    }
+  }
+
+  async function shareCode() {
+    if (!inviteCode) return;
+    try {
+      await Share.share({
+        message:
+          `Hej! Vi använder Trygghetsappen för att hålla koll när barnen åker buss. ` +
+          `Ladda ner appen och välj "Jag har en kod" när du skapar konto. Koden är: ${inviteCode}`,
+      });
+    } catch (error) {
+      Alert.alert('Kunde inte dela', error.message);
+    }
+  }
+
+  function confirmRotate() {
+    Alert.alert(
+      'Skapa ny kod?',
+      'Den gamla koden slutar fungera direkt. Den som redan är med i familjen påverkas inte.',
+      [
+        { text: 'Avbryt', style: 'cancel' },
+        { text: 'Ny kod', style: 'destructive', onPress: rotateCode },
+      ]
+    );
+  }
+
+  async function rotateCode() {
+    setRotating(true);
+    const { data, error } = await supabase.rpc('rotate_invite_code');
+    setRotating(false);
+    if (error) {
+      Alert.alert('Kunde inte skapa ny kod', error.message);
+      return;
+    }
+    // rotate_invite_code() svarar med själva koden som en textsträng.
+    setInviteCode(typeof data === 'string' ? data : '');
+    Alert.alert('Klart!', 'En ny kod är skapad. Dela den med den som ska gå med.');
   }
 
   async function handleToggleAiChat(value) {
     setAiChatEnabled(value);
-    const { error } = await supabase
-      .from('app_settings')
-      .upsert({ id: 1, ai_chat_enabled: value, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from('app_settings').upsert({
+      family_id: familyId,
+      ai_chat_enabled: value,
+      updated_at: new Date().toISOString(),
+    });
     if (error) {
       setAiChatEnabled(!value);
       Alert.alert('Kunde inte ändra', error.message);
@@ -67,11 +165,18 @@ export default function SettingsScreen({ visible, onClose }) {
   }
 
   async function handleSaveAppName() {
-    if (!appDisplayName.trim()) return;
+    // Ett tomt namn är inte ett namn. Utan spärren kunde ett misslyckat
+    // uppslag (fältet blev tomt) sparas rakt över familjens riktiga namn.
+    if (!appDisplayName.trim()) {
+      Alert.alert('Namnet är tomt', 'Skriv ett namn som ska synas i appen, t.ex. familjens namn.');
+      return;
+    }
     setSavingName(true);
-    const { error } = await supabase
-      .from('app_settings')
-      .upsert({ id: 1, display_name: appDisplayName.trim(), updated_at: new Date().toISOString() });
+    const { error } = await supabase.from('app_settings').upsert({
+      family_id: familyId,
+      display_name: appDisplayName.trim(),
+      updated_at: new Date().toISOString(),
+    });
     setSavingName(false);
     if (error) {
       Alert.alert('Kunde inte spara', error.message);
@@ -95,8 +200,6 @@ export default function SettingsScreen({ visible, onClose }) {
 
     if (value) {
       startBackgroundLocationTracking();
-      const { data: home } = await supabase.from('saved_places').select('*').eq('label', 'hem').maybeSingle();
-      if (home) startGeofencing([home]);
     } else {
       stopBackgroundLocationTracking();
     }
@@ -118,9 +221,11 @@ export default function SettingsScreen({ visible, onClose }) {
 
   async function handleSaveNote() {
     setSavingNote(true);
-    const { error } = await supabase
-      .from('today_note')
-      .upsert({ id: 1, content: todayNote.trim(), updated_at: new Date().toISOString() });
+    const { error } = await supabase.from('today_note').upsert({
+      family_id: familyId,
+      content: todayNote.trim(),
+      updated_at: new Date().toISOString(),
+    });
     setSavingNote(false);
     if (error) {
       Alert.alert('Kunde inte spara', error.message);
@@ -148,7 +253,43 @@ export default function SettingsScreen({ visible, onClose }) {
             contentContainerStyle={{ paddingBottom: 40 }}
             keyboardShouldPersistTaps="handled"
           >
-        <Text style={styles.sectionLabel}>Namn i appen</Text>
+        {!pushGranted && (
+          <TouchableOpacity style={styles.pushWarning} onPress={handleEnablePush}>
+            <Text style={styles.pushWarningTitle}>🔔 Notiserna är avstängda</Text>
+            <Text style={styles.pushWarningText}>
+              Då får du inget när barnet kommer fram eller larmar. Tryck här för att slå på dem.
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {profile?.role === 'parent' && (
+          <>
+            <Text style={styles.sectionLabel}>🔑 Inbjudningskod</Text>
+            <Text style={styles.helper}>
+              Den här koden ger nya personer plats i {familyName || 'familjen'}. Dela den bara med
+              dem du litar på.
+            </Text>
+            <View style={styles.codeBox}>
+              <Text style={styles.codeText}>{inviteCode || '—'}</Text>
+            </View>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.halfButton} onPress={shareCode} disabled={!inviteCode}>
+                <Text style={styles.halfButtonText}>Dela koden</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.halfButton, styles.halfButtonGhost]}
+                onPress={confirmRotate}
+                disabled={rotating}
+              >
+                <Text style={styles.halfButtonGhostText}>
+                  {rotating ? 'Skapar...' : 'Ny kod'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
+        <Text style={[styles.sectionLabel, { marginTop: 30 }]}>Namn i appen</Text>
         <Text style={styles.helper}>Visas högst upp, t.ex. barnets namn eller ett familjenamn.</Text>
         <TextInput
           style={styles.input}
@@ -161,7 +302,7 @@ export default function SettingsScreen({ visible, onClose }) {
         </TouchableOpacity>
 
         <Text style={[styles.sectionLabel, { marginTop: 30 }]}>Mitt telefonnummer</Text>
-        <Text style={styles.helper}>Används för "Ring pappa"-knappen i Vildas app.</Text>
+        <Text style={styles.helper}>Används för "Ring"-knappen i barnets app.</Text>
         <TextInput
           style={styles.input}
           placeholder="070-123 45 67"
@@ -174,7 +315,7 @@ export default function SettingsScreen({ visible, onClose }) {
         </TouchableOpacity>
 
         <Text style={[styles.sectionLabel, { marginTop: 30 }]}>📅 Idag</Text>
-        <Text style={styles.helper}>Visas överst i Vildas app, t.ex. "Mormor hämtar dig idag".</Text>
+        <Text style={styles.helper}>Visas överst i barnets app, t.ex. "Mormor hämtar dig idag".</Text>
         <TextInput
           style={[styles.input, styles.noteInput]}
           placeholder="Skriv dagens notering..."
@@ -189,7 +330,7 @@ export default function SettingsScreen({ visible, onClose }) {
         <View style={styles.shareRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.sectionLabel}>📍 Dela min position</Text>
-            <Text style={styles.helper}>Visar dig på Vildas familjekarta.</Text>
+            <Text style={styles.helper}>Visar dig på familjekartan.</Text>
           </View>
           <Switch
             value={locationSharing}
@@ -201,7 +342,7 @@ export default function SettingsScreen({ visible, onClose }) {
         <View style={styles.shareRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.sectionLabel}>🤖 Tillåt AI-chatt</Text>
-            <Text style={styles.helper}>Släpper in "Vilda AI"-knappen i appen. Av som standard.</Text>
+            <Text style={styles.helper}>Släpper in AI-knappen i appen. Av som standard.</Text>
           </View>
           <Switch
             value={aiChatEnabled}
@@ -235,6 +376,33 @@ const styles = StyleSheet.create({
   noteInput: { minHeight: 90, textAlignVertical: 'top' },
   saveButton: { backgroundColor: '#7C3AED', borderRadius: 14, padding: 16 },
   saveButtonText: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#fff' },
+  pushWarning: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 24,
+  },
+  pushWarningTitle: { color: '#991B1B', fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  pushWarningText: { color: '#991B1B', fontSize: 13, lineHeight: 18 },
+  codeBox: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingVertical: 18,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#C4B5FD',
+  },
+  codeText: { fontSize: 30, fontWeight: '800', letterSpacing: 6, color: '#4C1D95' },
+  buttonRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  halfButton: {
+    flex: 1,
+    backgroundColor: '#7C3AED',
+    borderRadius: 14,
+    padding: 14,
+  },
+  halfButtonText: { textAlign: 'center', color: '#fff', fontSize: 15, fontWeight: '600' },
+  halfButtonGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#C4B5FD' },
+  halfButtonGhostText: { textAlign: 'center', color: '#6D28D9', fontSize: 15, fontWeight: '600' },
   shareRow: {
     flexDirection: 'row',
     alignItems: 'center',

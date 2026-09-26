@@ -1,20 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { fetchAppDisplayName } from '../lib/appSettings';
+import { APP_NAME } from '../lib/appSettings';
 
-export default function LoginScreen() {
+export default function LoginScreen({ onSignup }) {
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [displayName, setDisplayName] = useState('Vilda');
-
-  useEffect(() => {
-    fetchAppDisplayName().then(setDisplayName);
-  }, []);
 
   async function handleLogin() {
+    if (!email.trim() || !password) {
+      Alert.alert('Fyll i båda fälten', 'Både e-post och lösenord behövs.');
+      return;
+    }
     setLoading(true);
     const { error } = await signIn(email.trim(), password);
     setLoading(false);
@@ -23,7 +22,7 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{displayName} 💜</Text>
+      <Text style={styles.title}>{APP_NAME} 💜</Text>
       <Text style={styles.subtitle}>Trygghet, alltid nära</Text>
 
       <TextInput
@@ -44,6 +43,10 @@ export default function LoginScreen() {
 
       <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
         <Text style={styles.buttonText}>{loading ? 'Loggar in...' : 'Logga in'}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={onSignup}>
+        <Text style={styles.linkText}>Ny här? Skapa konto</Text>
       </TouchableOpacity>
     </View>
   );
@@ -69,4 +72,5 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   buttonText: { color: '#fff', textAlign: 'center', fontSize: 18, fontWeight: '600' },
+  linkText: { textAlign: 'center', color: '#7C3AED', fontSize: 15, paddingVertical: 18 },
 });
