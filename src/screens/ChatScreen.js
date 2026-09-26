@@ -37,6 +37,18 @@ const CHILD_QUICK_MESSAGES = [
   '🍽️ Vad blir det till mat?',
 ];
 
+function sortByTime(a, b) {
+  return new Date(a.created_at) - new Date(b.created_at);
+}
+
+// Lägger till nya rader utan att skriva dubbletter: realtimen skickar även
+// tillbaka våra egna meddelanden, och en omladdning kan komma ikapp samma rad.
+function mergeMessages(prev, incoming) {
+  const byId = new Map(prev.map((m) => [m.id, m]));
+  for (const m of incoming) byId.set(m.id, m);
+  return Array.from(byId.values()).sort(sortByTime);
+}
+
 export default function ChatScreen({ visible, onClose }) {
   const { profile } = useAuth();
   const [messages, setMessages] = useState([]);
@@ -47,6 +59,7 @@ export default function ChatScreen({ visible, onClose }) {
 
   useEffect(() => {
     if (!visible) return;
+    let active = true;
     loadMessages();
 
     const channel = supabase
@@ -55,21 +68,37 @@ export default function ChatScreen({ visible, onClose }) {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new]);
+          if (!active) return;
+          setMessages((prev) => mergeMessages(prev, [payload.new]));
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Tappar vi realtimen (viloläge, dålig täckning, nystartad app) kommer
+        // inga nya meddelanden alls. Hämta om i stället för att lita på att
+        // prenumerationen lever.
+        if (!active) return;
+        if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          loadMessages();
+        }
+      });
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
   }, [visible]);
 
+  // Ordningen är fallande med flit: stigande ordning + limit(100) ger de
+  // ÄLDSTA hundra raderna, och så fort chatten vuxit förbi 100 meddelanden
+  // skulle nya meddelanden aldrig mer gå att hämta hem.
   async function loadMessages() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('messages')
       .select('*')
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(100);
-    setMessages(data || []);
+    if (error) return;
+    setMessages((data || []).slice().reverse());
   }
 
   async function handleCallParent() {
@@ -96,15 +125,23 @@ export default function ChatScreen({ visible, onClose }) {
 
   async function sendMessage(content) {
     setSending(true);
-    const { error } = await supabase.from('messages').insert({
-      sender_id: profile.id,
-      content,
-      message_type: 'text',
-    });
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: profile.id,
+        content,
+        message_type: 'text',
+      })
+      .select()
+      .single();
     setSending(false);
     if (error) {
       Alert.alert('Kunde inte skicka', error.message);
+      return;
     }
+    // Visa meddelandet direkt i stället för att vänta på att realtimen ekar
+    // tillbaka det.
+    if (data) setMessages((prev) => mergeMessages(prev, [data]));
   }
 
   function pickImage() {
@@ -151,12 +188,17 @@ export default function ChatScreen({ visible, onClose }) {
         data: { publicUrl },
       } = supabase.storage.from('chat-images').getPublicUrl(path);
 
-      const { error: insertError } = await supabase.from('messages').insert({
-        sender_id: profile.id,
-        content: publicUrl,
-        message_type: 'image',
-      });
+      const { data, error: insertError } = await supabase
+        .from('messages')
+        .insert({
+          sender_id: profile.id,
+          content: publicUrl,
+          message_type: 'image',
+        })
+        .select()
+        .single();
       if (insertError) throw insertError;
+      if (data) setMessages((prev) => mergeMessages(prev, [data]));
     } catch (error) {
       Alert.alert('Kunde inte skicka bilden', error.message);
     } finally {
